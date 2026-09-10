@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import Sortable from 'sortablejs'
 import { prefs, workspaces, persist, resetAll, uploadImage, fetchUploads, deleteUpload } from '../store/useStore'
 import { toast } from '../composables/useToast'
-import { accessToken } from '../access/useAccessGate'
+import { accessToken, changeKey } from '../access/useAccessGate'
 
 const BASE = import.meta.env.BASE_URL || '/'
 const bgThumbUrl = BASE + 'assets/default.jpg'
@@ -96,12 +97,42 @@ async function removeUpload(o) {
 }
 function saveVeil() { persist(); toast('遮罩强度已保存') }
 
+// ── 访问密钥 ──
+const newKey = ref('')
+const keyError = ref('')
+const KEY_RE = /^[A-Za-z0-9]{8,256}$/
+
+function validateKey(k) {
+  if (!k) return '请输入密钥'
+  if (k.length < 8) return '密钥至少 8 位'
+  if (k.length > 256) return '密钥最多 256 位'
+  if (!/^[A-Za-z0-9]+$/.test(k)) return '只能包含大小写字母与数字'
+  return ''
+}
+
+async function saveKey() {
+  const k = newKey.value.trim()
+  const err = validateKey(k)
+  keyError.value = err
+  if (err) { toast(err); return }
+  try {
+    await changeKey(k)     // 服务端用新密钥重新加密门禁密文
+    newKey.value = ''
+    keyError.value = ''
+    toast('访问密钥已更新')
+  } catch (e) {
+    toast(e.message || '保存失败')
+  }
+}
+
 onMounted(async () => {
   await loadUploads()
   selected.value = (prefs.bg === 'custom' && prefs.bgUrl)
     ? { type: 'upload', url: prefs.bgUrl }
     : { type: 'preset', v: 'default' }
+  initSortable()
 })
+onBeforeUnmount(() => { if (sortable) { sortable.destroy(); sortable = null } })
 
 // ── 诗句 ──
 function savePoem() {
@@ -115,7 +146,32 @@ function setSpeed(v) { prefs.speed = v; persist(); toast('打字速度已保存'
 function toggleTocDefault() { prefs.tocDefaultHidden = !prefs.tocDefaultHidden; persist() }
 function saveReaderSize() { persist(); toast('正文字号已保存') }
 
-// ── 工作区 ──
+// ── 工作区拖拽排序（SortableJS：平滑重排动画 + 自定义拖影） ──
+const wsList = ref(null)
+let sortable = null
+
+function initSortable() {
+  if (!wsList.value || sortable) return
+  sortable = Sortable.create(wsList.value, {
+    handle: '.ws-grip',
+    animation: 240,
+    easing: 'cubic-bezier(.2, 0, .2, 1)',
+    forceFallback: true,      // 自定义拖影，动效可控；触摸屏也可拖
+    fallbackClass: 'ws-fallback',
+    ghostClass: 'ws-ghost',
+    chosenClass: 'ws-chosen',
+    onEnd(evt) {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex === newIndex) return
+      const arr = workspaces.value
+      const [item] = arr.splice(oldIndex, 1)
+      arr.splice(newIndex, 0, item)
+      persist()
+      toast('已调整工作区顺序')
+    },
+  })
+}
+
 function onWsField(ws, field, e) {
   const el = e.target
   const val = el.value
@@ -252,29 +308,33 @@ async function doResetAll() {
 
         <section class="panel">
           <div class="panel-title"><h2>工作区管理</h2><span>WORKSPACES · WIN / LINUX</span></div>
-          <div v-if="!workspaces.length" class="empty">还没有工作区，请在下方新增。</div>
-          <div v-for="(ws, idx) in workspaces" :key="ws.id" class="ws-row">
-            <svg class="ws-grip icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h16M4 16h16"/></svg>
-            <div class="ws-main">
-              <div class="ws-name">
-                {{ ws.name }}
-                <span class="os-badge" :class="ws.os === 'linux' ? 'linux' : 'win'"><span class="dot"></span>{{ ws.os === 'linux' ? 'LINUX' : 'WIN' }}</span>
+          <div ref="wsList" class="ws-list">
+            <div v-for="(ws, idx) in workspaces" :key="ws.id" class="ws-row">
+              <span class="ws-grip" title="按住拖拽排序">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h16M4 16h16"/></svg>
+              </span>
+              <div class="ws-main">
+                <div class="ws-name">
+                  {{ ws.name }}
+                  <span class="os-badge" :class="ws.os === 'linux' ? 'linux' : 'win'"><span class="dot"></span>{{ ws.os === 'linux' ? 'LINUX' : 'WIN' }}</span>
+                </div>
+                <div class="ws-path">{{ ws.root }}</div>
+                <div class="ws-desc">{{ ws.desc || '' }}</div>
               </div>
-              <div class="ws-path">{{ ws.root }}</div>
-              <div class="ws-desc">{{ ws.desc || '' }}</div>
+              <div class="ws-edit">
+                <input class="input" :value="ws.name" aria-label="名称" @change="onWsField(ws, 'name', $event)" />
+                <select class="input" :value="ws.os" aria-label="系统" @change="onWsField(ws, 'os', $event)">
+                  <option value="win">Windows</option>
+                  <option value="linux">Linux</option>
+                </select>
+                <input class="input path" :value="ws.root" placeholder="绝对路径" aria-label="路径" @change="onWsField(ws, 'root', $event)" />
+              </div>
+              <button class="btn btn-ghost ws-del" aria-label="删除" @click="delWs(idx)">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>删除
+              </button>
             </div>
-            <div class="ws-edit">
-              <input class="input" :value="ws.name" aria-label="名称" @change="onWsField(ws, 'name', $event)" />
-              <select class="input" :value="ws.os" aria-label="系统" @change="onWsField(ws, 'os', $event)">
-                <option value="win">Windows</option>
-                <option value="linux">Linux</option>
-              </select>
-              <input class="input path" :value="ws.root" placeholder="绝对路径" aria-label="路径" @change="onWsField(ws, 'root', $event)" />
-            </div>
-            <button class="btn btn-ghost ws-del" aria-label="删除" @click="delWs(idx)">
-              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>删除
-            </button>
           </div>
+          <div v-if="!workspaces.length" class="empty">还没有工作区，请在下方新增。</div>
           <div class="inline-tip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
             <span>每个工作区对应本机一个目录：标注其系统环境（Windows / Linux）并填入真实路径。由本地目录服务（node server/index.mjs）实时扫描该路径，读取目录树、md 正文与引用图片。删除某个工作区后，博客右上角的分区中就不再显示它。</span>
@@ -305,6 +365,30 @@ async function doResetAll() {
           <div class="save-hint">
             <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 13l4 4L19 7"/></svg>
             所有改动自动保存到本地服务端（data/config.json），返回博客后立即生效。
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title"><h2>访问密钥</h2><span>ACCESS KEY</span></div>
+          <div class="field">
+            <label for="access-key">修改访问密钥（8–256 位，仅大小写字母与数字）</label>
+            <input
+              id="access-key"
+              class="input mono"
+              v-model="newKey"
+              :maxlength="256"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="输入新的访问密钥"
+            />
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+            <button class="btn btn-primary" @click="saveKey">保存密钥</button>
+            <span v-if="keyError" class="mono" style="color:var(--accent);font-size:12.5px;">{{ keyError }}</span>
+          </div>
+          <div class="save-hint">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 13l4 4L19 7"/></svg>
+            修改后请用新密钥访问：<span class="mono">?key=&lt;新密钥&gt;</span>。密钥不以明文保存 —— 服务端只存加密后的门禁密文。
           </div>
         </section>
       </div>

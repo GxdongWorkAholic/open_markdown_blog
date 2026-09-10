@@ -16,6 +16,8 @@
    │  上传：POST /api/upload?name=x.png  上传图片（存 data/uploads/，自动重命名为
    │                                      「年月日时分秒-16位随机串.扩展名」）
    │        GET  /api/uploads           已上传图片列表（最新在前）
+   │  门禁：GET  /api/secure            取门禁密文（前端用 ?key= 解密）
+   │        POST /api/key               修改访问密钥（用新密钥重新加密密文）
    ▼
 server/index.mjs  （Node 本地服务，同时托管构建后的 dist/）
 ```
@@ -40,12 +42,14 @@ server/index.mjs  （Node 本地服务，同时托管构建后的 dist/）
 
 `data/` 已在 `.gitignore` 中排除（属于本机运行时数据）。删除 `data/` 即回到出厂默认。
 
-## 访问门禁（方案 B）
+## 访问门禁（方案 B · 服务端持有密文）
 
+- **默认密钥 `ihateblog`**（首次运行自动生成密文；**请在设置页改成自己的**）
 - **无 key 或错误 key** → 游客：博客正常浏览，但不显示「外观与设置」按钮，也进不了设置页。
-- **正确 key**（`?key=<256 位随机串>`）→ 解锁：显示设置按钮，可进入设置页。
+- **正确 key**（`?key=<密钥>`）→ 解锁：显示设置按钮，可进入设置页。
+- 设置页「访问密钥」可**修改密钥**：**8–256 位，仅大小写字母与数字**。
 
-key 经 PBKDF2（SHA-256，210000 次）派生 AES-256-GCM 密钥，构建期把默认「外观/设置」加密成 `src/secure/config.enc.json`；key 本体不落盘，仅存内存。
+密钥经 PBKDF2（SHA-256，210000 次）派生 AES-256-GCM 密钥。服务端只在 `data/secure.json` 保存密文 `{salt, iv, ct}`，**不保存密钥本身**；前端取密文解密，解不开即未解锁（非明文比较）。修改密钥时，服务端用新密钥重新加密密文。
 
 ## 运行
 
@@ -73,25 +77,22 @@ http://localhost:8787/?key=<访问密钥>               # 解锁（可进设置�
 
 > 目录服务只扫描**文档类文件**（md / markdown / pdf / txt / doc / docx / xls / xlsx / ppt / pptx / rtf）；不含文档的目录（如纯图片目录）不进目录树。md 正文里的图片按相对路径实时加载。
 
-## 重新生成密文 / 轮换 key
+## 修改 / 重置访问密钥
 
-```bash
-ACCESS_TOKEN=<新token> npm run encrypt   # 生成 src/secure/config.enc.json
-npm run build
-```
+- **修改**：解锁后进设置页 →「访问密钥」→ 输入新密钥（8–256 位字母数字）→ 保存密钥。
+- **忘记密钥**：删除 `data/secure.json` 后重启服务，即恢复默认 `ihateblog`。
 
 ## 目录结构
 
 ```
-server/index.mjs              # 本地服务：目录扫描 + 设置持久化 + 图片上传 + 托管 dist
-scripts/encrypt-config.mjs    # 构建期加密脚本（Node crypto）
-src/access/useAccessGate.js   # 方案 B 运行时解密（Web Crypto）
-src/secure/config.enc.json    # 密文 {salt, iv, ct}
+server/index.mjs              # 本地服务：目录扫描 + 设置持久化 + 图片上传 + 门禁密文 + 托管 dist
+src/access/useAccessGate.js   # 方案 B 运行时解密（Web Crypto）+ 修改密钥
+src/composables/useTheme.js   # 深色/白天主题（按北京时间默认，不持久化）
 src/store/useStore.js         # 全局状态 + 服务端设置读写 + 实时目录读取
 src/markdown/mdToHtml.js      # Markdown 渲染器（图片经 /api/img）
 src/components/  src/views/   # 组件与路由页面
-public/assets/                # 首页背景图（预设）
-data/                         # 运行时数据（config.json + uploads/），已 gitignore
+public/assets/default.jpg     # 首页背景图（默认）
+data/                         # 运行时数据（config.json + secure.json + uploads/），已 gitignore
 ```
 
 ## 说明

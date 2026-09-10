@@ -343,9 +343,26 @@ p { margin: 0; }
 .chip .sw { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); flex: none; }
 .chip.on .sw { border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
 
-.ws-row { display: flex; align-items: flex-start; gap: 16px; padding: 18px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
-.ws-row:first-of-type { border-top: 0; }
-.ws-grip { color: var(--muted); margin-top: 4px; }
+.ws-list { display: block; }
+.ws-row {
+  display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+  padding: 16px 18px; margin-bottom: 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.ws-row:last-child { margin-bottom: 0; }
+/* ── SortableJS 拖拽状态 ── */
+.ws-row.ws-ghost { opacity: .38; border-style: dashed; border-color: var(--accent); background: var(--accent-soft); }
+.ws-row.ws-chosen { cursor: grabbing; }
+.ws-fallback {
+  opacity: .97; transition: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 22px 48px -20px color-mix(in oklch, var(--fg) 55%, transparent) !important;
+  rotate: 1.2deg; scale: 1.02;   /* 用独立属性，避免和 Sortable 的 transform 定位冲突 */
+  cursor: grabbing;
+}
+.ws-grip { color: var(--muted); margin-top: 3px; cursor: grab; display: inline-flex; flex: none; touch-action: none; }
+.ws-grip:active { cursor: grabbing; }
 .ws-main { flex: 1; min-width: 230px; }
 .ws-name { font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 10px; }
 .ws-path { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); margin-top: 4px; word-break: break-all; }
@@ -448,7 +465,7 @@ p { margin: 0; }
   .settings { padding-bottom: 70px; }
   .cards { gap: var(--gap-md); }
   .bg-presets { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .ws-row { padding: 14px 0; gap: 10px; }
+  .ws-row { padding: 14px; gap: 10px; }
   .ws-del { width: 100%; justify-content: center; }
   .add-row { gap: 8px; }
   .inline-tip { font-size: 12.5px; padding: 12px 14px; }

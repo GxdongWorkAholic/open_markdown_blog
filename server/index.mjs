@@ -5,7 +5,7 @@
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, pbkdf2Sync, createCipheriv } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -64,6 +64,45 @@ function readConfig() {
 function writeConfig(cfg) {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8')
+}
+
+// ─────────── 访问密钥门禁（方案 B：只存密文，密钥不落盘） ───────────
+// 前端用 ?key= 派生密钥去解密密文，解得开即解锁。服务端从不保存密钥本身。
+const DEFAULT_KEY = 'ihateblog'   // 默认访问密钥（请在设置页修改）
+const KEY_RE = /^[A-Za-z0-9]{8,256}$/
+const SECURE_FILE = path.join(DATA_DIR, 'secure.json')
+const PBKDF2_ITER = 210000
+const SECURE_MARKER = 'open-markdown-blog:granted'
+
+// 用访问密钥加密「门禁标记」→ { salt, iv, ct }。密钥本身不保存。
+function encryptMarker(token) {
+  const salt = randomBytes(16)
+  const iv = randomBytes(12)
+  const key = pbkdf2Sync(token, salt, PBKDF2_ITER, 32, 'sha256')
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const ct = Buffer.concat([cipher.update(SECURE_MARKER, 'utf8'), cipher.final()])
+  return {
+    salt: salt.toString('base64'),
+    iv: iv.toString('base64'),
+    ct: Buffer.concat([ct, cipher.getAuthTag()]).toString('base64'),
+  }
+}
+
+function readSecure() {
+  try { return JSON.parse(fs.readFileSync(SECURE_FILE, 'utf8')) } catch { return null }
+}
+function writeSecure(obj) {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.writeFileSync(SECURE_FILE, JSON.stringify(obj), 'utf8')
+}
+// 首次运行（或密文丢失）时用默认密钥生成
+function ensureSecure() {
+  let s = readSecure()
+  if (!s || !s.salt || !s.iv || !s.ct) {
+    s = encryptMarker(DEFAULT_KEY)
+    writeSecure(s)
+  }
+  return s
 }
 
 // ─────────── 目录扫描 ───────────
@@ -181,6 +220,21 @@ function apiConfigReset(res) {
   sendJSON(res, 200, { ok: true, config: cfg })
 }
 
+// 修改访问密钥：用新密钥重新加密门禁密文（密钥本身不保存）
+async function apiSetKey(req, res) {
+  const buf = await readBody(req)
+  let body
+  try { body = JSON.parse(buf.toString('utf8')) } catch { return sendJSON(res, 400, { error: 'JSON 解析失败' }) }
+  const key = String(body.key || '').trim()
+  if (!KEY_RE.test(key)) return sendJSON(res, 400, { error: '密钥需为 8–256 位大小写字母或数字' })
+  try {
+    writeSecure(encryptMarker(key))
+    sendJSON(res, 200, { ok: true })
+  } catch (e) {
+    sendJSON(res, 500, { error: '保存失败：' + e.message })
+  }
+}
+
 // 上传文件名：年月日时分秒-16位随机串.扩展名
 function uploadStamp() {
   const d = new Date()
@@ -260,6 +314,8 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname)
   const method = req.method || 'GET'
 
+  if (pathname === '/api/secure') return sendJSON(res, 200, ensureSecure())
+  if (pathname === '/api/key' && method === 'POST') return apiSetKey(req, res)
   if (pathname === '/api/config') {
     if (method === 'POST') return apiConfigSave(req, res)
     return apiConfigGet(res)
@@ -286,5 +342,6 @@ server.listen(PORT, () => {
   console.log(`[dir-server] 目录: /api/ws /api/doc /api/img`)
   console.log(`[dir-server] 设置: GET|POST /api/config, POST /api/config/reset`)
   console.log(`[dir-server] 上传: POST /api/upload?name=x.png  ->  ${UPLOAD_DIR}`)
+  console.log(`[dir-server] 门禁: GET /api/secure, POST /api/key（默认密钥 ${DEFAULT_KEY}，可在设置页修改）`)
   console.log(`[dir-server] 托管静态文件: ${DIST}`)
 })

@@ -9,10 +9,10 @@
     "build": "vite build",
     "serve": "node server/index.mjs",
     "start": "npm run build && node server/index.mjs",
-    "preview": "vite preview",
-    "encrypt": "node scripts/encrypt-config.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
+    "sortablejs": "^1.15.7",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },

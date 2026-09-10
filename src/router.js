@@ -4,7 +4,8 @@ import HomeView from './views/HomeView.vue'
 import SettingsView from './views/SettingsView.vue'
 
 export const router = createRouter({
-  history: createWebHistory(),
+  // 用构建时的基础路径（默认 '/'），部署到子路径时改 vite 的 base 即可，无需改代码
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/settings', name: 'settings', component: SettingsView },
