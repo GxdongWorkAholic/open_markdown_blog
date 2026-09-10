@@ -77,7 +77,7 @@ function dirCount(n) {
         </div>
       </div>
 
-      <div class="browser">
+      <div v-if="workspaces.length" class="browser">
         <aside class="tree-pane">
           <div class="tree-pane-title">目录结构</div>
           <div class="tree-path">{{ wsMeta ? wsMeta.root : '' }}</div>
@@ -135,6 +135,9 @@ function dirCount(n) {
             </template>
           </div>
         </div>
+      </div>
+      <div v-else class="empty" style="margin-top:var(--gap-lg);border:1px dashed var(--border);border-radius:16px;padding:60px 24px;">
+        还没有工作区。请点右上角「外观与设置」进入设置页，在「工作区管理」中新增一个本机目录（需访问密钥）。
       </div>
 
       <div class="snapshot-note">

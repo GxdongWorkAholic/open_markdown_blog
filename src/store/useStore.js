@@ -1,7 +1,5 @@
-// 全局状态 —— 实时读取：工作区路径指向本地目录，由 server/index.mjs 扫描并提供正文/图片
+// 全局状态 —— 设置持久化到服务端（data/config.json）；工作区路径由目录服务实时扫描
 import { reactive, ref } from 'vue'
-
-const LS = 'shijian.blog.v1'
 
 export const DOC_EXTS = ['md', 'markdown', 'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'rtf']
 export const TYPE_LABEL = {
@@ -10,20 +8,14 @@ export const TYPE_LABEL = {
 }
 const coll = new Intl.Collator('zh')
 
-// 公共默认外观（游客与解锁用户均可见；key 仅门禁「外观与设置」按钮与设置页）
-const DEFAULTS = {
-  bg: 'ridge', bgData: '', veil: 0.5,
-  poem: ['问渠那得清如许', '为有源头活水来', '千淘万漉虽辛苦', '吹尽狂沙始到金', '不积跬步，无以至千里', '不积小流，无以成江海'],
-  speed: 'mid', poemSize: 46, tocDefaultHidden: false, readerSize: 17
+// 前端兜底（真正默认值由服务端 DEFAULT_CONFIG 提供，加载后覆盖）
+const FALLBACK_PREFS = {
+  bg: 'default', bgUrl: '', veil: 0.5, poem: [], speed: 'mid',
+  poemSize: 46, tocDefaultHidden: false, readerSize: 17
 }
-// 默认工作区（路径可在设置页改成真实路径，由目录服务实时读取）
-const DEFAULT_WS = [
-  { id: 'mymajor', name: 'mymajor', os: 'win', root: 'E:\\mymicrosoft\\download\\temp\\mymajor', desc: 'Java 后端学习库 · java-doc' },
-  { id: 'mymdrecord', name: 'mymdrecord', os: 'win', root: 'E:\\mymicrosoft\\download\\temp\\mymdrecord', desc: '随手记录 · 分类笔记库' },
-]
 
-export const prefs = reactive({ ...DEFAULTS })
-export const workspaces = ref([])
+export const prefs = reactive({ ...FALLBACK_PREFS })
+export const workspaces = ref([])      // 默认工作区为空，由用户在设置页新增
 export const activeWs = ref(null)
 export const activePath = ref(null)
 export const lastOpened = ref(null)
@@ -32,17 +24,64 @@ export const view = ref('home')     // 'home' | 'reader'
 export const activeRel = ref(null)  // 当前打开的文档 rel 路径
 
 // 实时数据（来自目录服务）
-export const tree = ref([])          // 当前工作区目录树
-export const loading = ref(false)    // 扫描中
-export const error = ref('')         // 扫描错误信息
-export const docText = ref('')       // 当前文档正文
+export const tree = ref([])
+export const loading = ref(false)
+export const error = ref('')
+export const docText = ref('')
 export const docLoading = ref(false)
 export const docError = ref('')
 
-// ─────────── 目录服务 API 地址 ───────────
+// ─────────── API 地址 ───────────
 export function apiWs(root) { return '/api/ws?root=' + encodeURIComponent(root) }
 export function apiDoc(root, rel) { return '/api/doc?root=' + encodeURIComponent(root) + '&rel=' + encodeURIComponent(rel) }
 export function apiImg(root, rel) { return '/api/img?root=' + encodeURIComponent(root) + '&rel=' + encodeURIComponent(rel) }
+
+// ─────────── API：设置持久化 ───────────
+export async function fetchConfig() {
+  const res = await fetch('/api/config')
+  if (!res.ok) throw new Error('读取设置失败')
+  return res.json()
+}
+export function saveConfig(cfg) {
+  return fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  })
+}
+export async function resetConfig() {
+  const res = await fetch('/api/config/reset', { method: 'POST' })
+  const data = await res.json()
+  if (!data.ok) throw new Error(data.error || '恢复默认失败')
+  return data.config
+}
+// 上传图片到服务端默认图片目录（data/uploads/），返回 { name, url }
+export async function uploadImage(file) {
+  const res = await fetch('/api/upload?name=' + encodeURIComponent(file.name || 'upload.png'), {
+    method: 'POST',
+    body: file,
+  })
+  const data = await res.json()
+  if (!data.ok) throw new Error(data.error || '上传失败')
+  return { name: data.name, url: data.url }
+}
+// 已上传图片列表（最新在前）
+export async function fetchUploads() {
+  try {
+    const res = await fetch('/api/uploads')
+    const data = await res.json()
+    return Array.isArray(data.files) ? data.files : []
+  } catch {
+    return []
+  }
+}
+// 删除已上传的图片（连同服务端文件一起删除）
+export async function deleteUpload(name) {
+  const res = await fetch('/api/uploads/' + encodeURIComponent(name), { method: 'DELETE' })
+  const data = await res.json()
+  if (!data.ok) throw new Error(data.error || '删除失败')
+  return true
+}
 
 // ─────────── 工具函数 ───────────
 export function hsize(bytes) {
@@ -128,17 +167,14 @@ export function crumbsFor(path) {
   return path.split('/')
 }
 
-// ─────────── 持久化 ───────────
-function loadRaw() {
-  try { return JSON.parse(localStorage.getItem(LS) || 'null') } catch { return null }
-}
+// ─────────── 持久化到服务端 ───────────
 export function persist() {
-  try {
-    localStorage.setItem(LS, JSON.stringify({
-      prefs: { ...prefs }, workspaces: workspaces.value,
-      activeWs: activeWs.value, activePath: activePath.value, lastOpened: lastOpened.value
-    }))
-  } catch { /* 隐私模式等场景忽略 */ }
+  saveConfig({
+    prefs: { ...prefs },
+    workspaces: workspaces.value,
+    activeWs: activeWs.value,
+    activePath: activePath.value,
+  }).catch(() => { /* 服务不可用等场景忽略 */ })
 }
 
 // ─────────── 动作 ───────────
@@ -212,38 +248,36 @@ export function readerScrollTo(id) {
   window.scrollTo(0, Math.max(0, y))
 }
 
-export function resetAll() {
-  try { localStorage.removeItem(LS) } catch { /* ignore */ }
-}
-
-// ─────────── 初始化 ───────────
-export function initStore() {
-  const state = loadRaw()
-
-  const defaults = { ...DEFAULTS }
-  const savedPrefs = (state && state.prefs && typeof state.prefs === 'object') ? state.prefs : {}
-  for (const k in defaults) {
-    if (savedPrefs[k] != null) prefs[k] = savedPrefs[k]
-    else if (state && state[k] != null) prefs[k] = state[k]
-    else prefs[k] = defaults[k]
+// ─────────── 初始化 / 恢复默认 ───────────
+function applyConfig(cfg) {
+  for (const k in FALLBACK_PREFS) {
+    prefs[k] = (cfg.prefs && cfg.prefs[k] != null) ? cfg.prefs[k] : FALLBACK_PREFS[k]
   }
-
-  const savedWs = (state && state.workspaces) || null
+  // 归一化历史值（旧 'ridge'/'night' → 'default'）
+  if (prefs.bg !== 'custom' && prefs.bg !== 'default') prefs.bg = 'default'
   workspaces.value = reactive(
-    (savedWs && savedWs.length)
-      ? JSON.parse(JSON.stringify(savedWs))
-      : JSON.parse(JSON.stringify(DEFAULT_WS))
+    Array.isArray(cfg.workspaces) ? JSON.parse(JSON.stringify(cfg.workspaces)) : []
   )
-
-  let keep = null
-  const want = state && state.activeWs
-  for (const w of workspaces.value) if (w.id === want) { keep = w.id; break }
-  activeWs.value = keep || (workspaces.value.length ? workspaces.value[0].id : null)
-
-  activePath.value = (state && state.activePath) || null
-  lastOpened.value = (state && state.lastOpened) || null
+  const want = cfg.activeWs
+  const keep = workspaces.value.some(w => w.id === want)
+    ? want
+    : (workspaces.value.length ? workspaces.value[0].id : null)
+  activeWs.value = keep
+  activePath.value = (keep && keep === want) ? (cfg.activePath || null) : null
+  lastOpened.value = null
   view.value = 'home'
   activeRel.value = null
+}
 
+export async function initStore() {
+  let cfg = null
+  try { cfg = await fetchConfig() } catch { /* 服务不可用则用兜底 */ }
+  applyConfig(cfg || { prefs: {}, workspaces: [] })
+  loadTree()
+}
+
+export async function resetAll() {
+  const cfg = await resetConfig().catch(() => null)
+  if (cfg) applyConfig(cfg)
   loadTree()
 }

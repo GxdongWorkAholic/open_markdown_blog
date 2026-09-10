@@ -24,6 +24,19 @@
   --topbar-h: 60px;
   --shadow: 0 1px 0 var(--border), 0 10px 34px -24px color-mix(in oklch, var(--fg) 32%, transparent);
 }
+
+/* ─────────── 深色模式（data-theme 切换；不持久化，按北京时间默认） ─────────── */
+:root[data-theme="dark"] {
+  --bg:      oklch(17% 0.008 60);
+  --surface: oklch(21% 0.008 60);
+  --fg:      oklch(93% 0.008 85);
+  --muted:   oklch(66% 0.012 80);
+  --border:  oklch(31% 0.008 60);
+  --accent:  oklch(71% 0.13 30);
+  --accent-soft: color-mix(in oklch, var(--accent) 22%, transparent);
+  --fg-soft:     color-mix(in oklch, var(--fg) 9%, transparent);
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body {
@@ -89,19 +102,21 @@ p { margin: 0; }
 .brand { display: inline-flex; align-items: baseline; gap: 10px; }
 .brand-mark { font-family: var(--font-display); font-size: 22px; letter-spacing: 0.08em; font-weight: 600; }
 .brand-sub { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; opacity: .82; }
+.hero-acts { display: flex; align-items: center; gap: 10px; }
 .hero-act {
-  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px;
   border: 1px solid rgba(255,255,255,.22); border-radius: 999px;
   background: rgba(10,9,8,.2); color: var(--on-image);
   font-size: 13.5px; backdrop-filter: blur(6px);
   transition: border-color .15s ease, background .15s ease;
 }
+.hero-act .icon-sm { width: 18px; height: 18px; }
 .hero-act:hover { border-color: rgba(255,255,255,.55); background: rgba(10,9,8,.36); }
 .poem-wrap { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px clamp(20px, 5vw, 60px) 90px; }
 .poem-kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.32em; color: var(--on-image); opacity: .8; margin-bottom: 34px; }
 #poem-stage {
   font-family: var(--font-display);
-  font-size: var(--fs-poem);
+  font-size: var(--poem-size, var(--fs-poem));
   line-height: 1.7; min-height: 2.1em;
   letter-spacing: 0.06em; font-weight: 600;
   text-shadow: 0 1px 24px rgba(0,0,0,.45);
@@ -304,12 +319,17 @@ p { margin: 0; }
 .input:focus, .textarea:focus, select.input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .textarea { min-height: 140px; resize: vertical; line-height: 1.8; font-family: var(--font-display); }
 .bg-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 4px 0 14px; }
-.bg-presets .preset { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); text-align: left; }
-.bg-presets .preset .thumb { height: 92px; background-size: cover; background-position: center; position: relative; }
-.bg-presets .preset .thumb::after { content: ""; position: absolute; inset: 0; border-bottom: 1px solid var(--border); }
-.bg-presets .preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.bg-presets .preset { position: relative; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); text-align: left; cursor: pointer; }
+.bg-presets .preset .thumb { display: block; height: 92px; overflow: hidden; position: relative; }
+.bg-presets .preset .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bg-presets .preset .thumb::after { content: ""; position: absolute; inset: 0; border-bottom: 1px solid var(--border); pointer-events: none; }
+.bg-presets .preset.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .bg-presets .preset .lbl { padding: 9px 12px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.bg-presets .preset.on .lbl::after { content: "✓"; color: var(--accent); font-weight: 700; }
+.bg-presets .preset .lbl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bg-presets .preset.on .lbl::after { content: "✓"; color: var(--accent); font-weight: 700; flex: none; }
+.bg-presets .preset .del { position: absolute; top: 6px; right: 6px; z-index: 3; width: 22px; height: 22px; border-radius: 50%; background: rgba(10,9,8,.55); color: #fff; display: grid; place-items: center; border: 0; }
+.bg-presets .preset .del:hover { background: rgba(10,9,8,.85); }
+.bg-presets .preset .del svg { width: 13px; height: 13px; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .range-row { display: flex; align-items: center; gap: 14px; }
 .range-row input[type=range] { flex: 1; accent-color: var(--accent); }
@@ -354,10 +374,11 @@ p { margin: 0; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ─────────── 移动端适配（仅在小屏生效，桌面端不受影响） ─────────── */
 @media (max-width: 980px) {
-  .browser { grid-template-columns: 1fr; }
+  .browser { grid-template-columns: 1fr; min-height: 0; }
   .tree-pane { border-right: 0; border-bottom: 1px solid var(--border); max-height: 300px; }
-  .reader-layout { grid-template-columns: 1fr; }
+  .reader-layout { grid-template-columns: 1fr; gap: var(--gap-lg); }
   .toc-pane { position: static; border-left: 0; border-bottom: 1px solid var(--border); padding: 0 0 12px; }
   .toc-list { flex-direction: row; flex-wrap: wrap; gap: 2px; }
   .toc-list a { white-space: normal; padding: 3px 8px; }
@@ -365,15 +386,76 @@ p { margin: 0; }
   #poem-stage { white-space: normal; text-align: center; }
   #poem-line { white-space: normal; }
 }
+
 @media (max-width: 760px) {
   .row2 { grid-template-columns: 1fr; }
-  .add-row { grid-template-columns: 1fr 1fr; }
+  .add-row { grid-template-columns: 1fr; }
+  .ws-edit { grid-template-columns: 1fr; min-width: 0; }
+  .ws-main { min-width: 0; }
+  .settings-head { flex-direction: column; align-items: flex-start; }
+  .settings-head h1 { font-size: clamp(26px, 8vw, 36px); }
+  .panel { padding: 20px 18px; }
 }
+
 @media (max-width: 620px) {
-  .bg-presets { grid-template-columns: 1fr; }
-  .reader-acts { min-width: 0; }
-  .reader-top .docmeta { display: none; }
-  .searchbox input { width: 160px; }
+  :root { --gutter: 16px; }
+
+  /* 顶部：只留图标，避免拥挤 */
+  .hero-top { padding: 16px 16px; gap: 10px; }
+  .brand-mark { font-size: 18px; }
+  .hero-acts { gap: 8px; }
+  .hero-act { padding: 8px; }
+
+  .poem-wrap { padding: 16px 18px 76px; }
+  .poem-kicker { font-size: 11px; letter-spacing: 0.22em; margin-bottom: 22px; }
+  #poem-stage { font-size: min(var(--poem-size, 46px), 34px); }
+  #poem-source { font-size: 12px; }
+  .scroll-cue { bottom: 18px; }
+
+  .shelf { padding-block: 34px; }
   .shelf-head { align-items: flex-start; flex-direction: column; }
-  .poem-kicker { font-size: 11px; }
+  .shelf-title { font-size: clamp(26px, 8vw, 34px); }
+  .shelf-sub { font-size: 13.5px; }
+  .seg { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .seg button { flex: none; }
+
+  .browser { border-radius: 12px; margin-top: var(--gap-md); }
+  .tree-pane { max-height: 240px; }
+  .crumbs { padding: 12px 14px 10px; font-size: 13px; }
+  .list-tools { padding: 10px 14px 12px; flex-wrap: wrap; gap: 8px; }
+  .searchbox { flex: 1; min-width: 0; }
+  .searchbox input { width: 100%; }
+  .frows { max-height: none; padding: 0 6px 12px; }
+  .frow { gap: 10px; padding: 10px; }
+  .frow .fico { width: 34px; height: 34px; }
+  .frow .fname { font-size: 14px; }
+
+  /* 阅读器 */
+  .reader-top-in { gap: 8px; }
+  .reader-top .docname { font-size: 14px; max-width: 42vw; }
+  .reader-top .docmeta { display: none; }
+  .reader-acts { min-width: 0; gap: 4px; }
+  .reader-back { padding: 8px; font-size: 13px; }
+  .reader-layout { padding-top: var(--gap-lg); padding-bottom: 70px; }
+  .doc-head { padding-bottom: 18px; margin-bottom: 22px; }
+  .doc-head h1 { font-size: clamp(22px, 6.5vw, 30px); }
+  .md-body { line-height: 1.85; }
+  .md-body pre { padding: 12px 14px; border-radius: 10px; }
+  .md-body pre code { font-size: 12.5px; }
+  .readfoot { margin-top: 28px; }
+
+  /* 设置页 */
+  .settings { padding-bottom: 70px; }
+  .cards { gap: var(--gap-md); }
+  .bg-presets { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ws-row { padding: 14px 0; gap: 10px; }
+  .ws-del { width: 100%; justify-content: center; }
+  .add-row { gap: 8px; }
+  .inline-tip { font-size: 12.5px; padding: 12px 14px; }
+  .pagefoot { font-size: 12px; padding: 18px 0; }
+}
+
+@media (max-width: 420px) {
+  .bg-presets { grid-template-columns: 1fr; }
+  .hero-top { padding: 12px; }
 }

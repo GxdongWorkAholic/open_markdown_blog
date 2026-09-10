@@ -1,13 +1,19 @@
-// 本地目录服务：扫描指定路径、读取文档/图片，并托管构建后的前端。
-// 浏览器无法读取本地磁盘，因此由本服务在服务器端按「工作区 root 路径」实时扫描与读取。
+// 本地目录服务 + 设置持久化。
+// - 扫描指定路径、读取文档/图片（浏览器无法读本地磁盘，故由本服务代读）
+// - 设置持久化到 data/config.json；上传图片存 data/uploads/
 // 运行：node server/index.mjs  （PORT 环境变量可改端口，默认 8787）
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DIST = path.join(__dirname, '..', 'dist')
+const ROOT = path.join(__dirname, '..')
+const DIST = path.join(ROOT, 'dist')
+const DATA_DIR = path.join(ROOT, 'data')
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')  // 图片上传的默认路径
 const PORT = Number(process.env.PORT || 8787)
 
 const DOC_EXTS = new Set(['md', 'markdown', 'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'rtf'])
@@ -22,17 +28,46 @@ const MIME = {
   '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
 }
 
-function extOf(name) { const i = name.lastIndexOf('.'); return i === -1 ? '' : name.slice(i + 1).toLowerCase() }
+// 默认设置（默认工作区为空，由用户在设置页新增真实路径）
+const DEFAULT_CONFIG = {
+  prefs: {
+    bg: 'default', bgUrl: '', veil: 0.5,
+    poem: ['问渠那得清如许', '为有源头活水来', '千淘万漉虽辛苦', '吹尽狂沙始到金', '不积跬步，无以至千里', '不积小流，无以成江海'],
+    speed: 'mid', poemSize: 46, tocDefaultHidden: false, readerSize: 17,
+  },
+  workspaces: [],
+  activeWs: null,
+  activePath: null,
+}
 
+function extOf(name) { const i = name.lastIndexOf('.'); return i === -1 ? '' : name.slice(i + 1).toLowerCase() }
 function pad(n) { return String(n).padStart(2, '0') }
 function fmtMt(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
-
 function readDirSafe(p) { try { return fs.readdirSync(p, { withFileTypes: true }) } catch { return null } }
 
-// 递归扫描目录，构建与原型一致的树结构：{ n, p, d?, size?, mt?, ext? }（只含文档，不含图片；
-// 只保留含文档的目录，纯图片/空目录不进树）
+// ─────────── 设置持久化 ───────────
+function readConfig() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
+    return {
+      prefs: { ...DEFAULT_CONFIG.prefs, ...(cfg.prefs || {}) },
+      workspaces: Array.isArray(cfg.workspaces) ? cfg.workspaces : [],
+      activeWs: cfg.activeWs || null,
+      activePath: cfg.activePath || null,
+    }
+  } catch {
+    return JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+  }
+}
+function writeConfig(cfg) {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8')
+}
+
+// ─────────── 目录扫描 ───────────
+// 递归扫描，构建 { n, p, d?, size?, mt?, ext? }（只含文档；只保留含文档的目录）
 function collectDir(abs, rel) {
   const entries = readDirSafe(abs)
   if (!entries) return []
@@ -69,80 +104,187 @@ function sendJSON(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) })
   res.end(body)
 }
-
 function sendText(res, code, text) {
   res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' })
   res.end(text)
 }
+function readBody(req) {
+  return new Promise(resolve => {
+    const chunks = []
+    req.on('data', c => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', () => resolve(Buffer.alloc(0)))
+  })
+}
+function sendFile(res, target, mime, cache) {
+  let buf
+  try { buf = fs.readFileSync(target) } catch { return sendText(res, 404, 'not found') }
+  res.writeHead(200, {
+    'Content-Type': mime || 'application/octet-stream',
+    'Content-Length': buf.length,
+    'Cache-Control': cache || 'no-cache',
+  })
+  res.end(buf)
+}
 
-// ─────────── API ───────────
+// ─────────── API：目录 ───────────
 function apiWs(url, res) {
   const root = url.searchParams.get('root') || ''
-  if (!root) return sendJSON(res, 400, { error: '缺少 root 参数' })
+  if (!root) return sendJSON(res, 400, { error: '缺少 root 参数', tree: [] })
   const abs = path.resolve(root)
   if (!fs.existsSync(abs)) return sendJSON(res, 404, { error: '路径不存在：' + abs, tree: [] })
   if (!fs.statSync(abs).isDirectory()) return sendJSON(res, 400, { error: '不是目录：' + abs, tree: [] })
-  const tree = collectDir(abs, '')
-  sendJSON(res, 200, { root: abs, tree })
+  sendJSON(res, 200, { root: abs, tree: collectDir(abs, '') })
 }
 
 function apiDoc(url, res) {
   const root = url.searchParams.get('root') || ''
   const rel = url.searchParams.get('rel') || ''
   const target = safeJoin(root, rel)
-  if (!target) return sendJSON(res, 400, { error: '非法路径' })
+  if (!target) return sendJSON(res, 400, { error: '非法路径', text: '' })
   let st
   try { st = fs.statSync(target) } catch { return sendJSON(res, 404, { error: '文件不存在：' + rel, text: '' }) }
   if (!st.isFile()) return sendJSON(res, 400, { error: '不是文件：' + rel, text: '' })
   const ext = extOf(rel)
   if (ext === 'md' || ext === 'markdown' || ext === 'txt') {
-    const text = fs.readFileSync(target, 'utf8')
-    return sendJSON(res, 200, { text, size: st.size, mt: fmtMt(st.mtime) })
+    return sendJSON(res, 200, { text: fs.readFileSync(target, 'utf8'), size: st.size, mt: fmtMt(st.mtime) })
   }
-  // 其它文档类型（pdf/doc 等）无法在浏览器内直接预览，返回占位说明
   sendJSON(res, 200, { text: '', size: st.size, mt: fmtMt(st.mtime), binary: true })
 }
 
 function apiImg(url, res) {
-  const root = url.searchParams.get('root') || ''
-  const rel = url.searchParams.get('rel') || ''
-  const target = safeJoin(root, rel)
+  const target = safeJoin(url.searchParams.get('root') || '', url.searchParams.get('rel') || '')
   if (!target) return sendText(res, 400, '非法路径')
-  let buf
-  try { buf = fs.readFileSync(target) } catch { return sendText(res, 404, 'not found') }
-  const mime = MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream'
-  res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length })
-  res.end(buf)
+  sendFile(res, target, MIME[path.extname(target).toLowerCase()])
+}
+
+// ─────────── API：设置持久化 + 图片上传 ───────────
+function apiConfigGet(res) { sendJSON(res, 200, readConfig()) }
+
+async function apiConfigSave(req, res) {
+  const buf = await readBody(req)
+  let cfg
+  try { cfg = JSON.parse(buf.toString('utf8')) } catch { return sendJSON(res, 400, { error: '配置 JSON 解析失败' }) }
+  const safe = {
+    prefs: { ...DEFAULT_CONFIG.prefs, ...(cfg.prefs || {}) },
+    workspaces: Array.isArray(cfg.workspaces) ? cfg.workspaces : [],
+    activeWs: cfg.activeWs || null,
+    activePath: cfg.activePath || null,
+  }
+  try { writeConfig(safe) } catch (e) { return sendJSON(res, 500, { error: '写入失败：' + e.message }) }
+  sendJSON(res, 200, { ok: true, config: safe })
+}
+
+function apiConfigReset(res) {
+  const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+  try { writeConfig(cfg) } catch (e) { return sendJSON(res, 500, { error: '写入失败：' + e.message }) }
+  sendJSON(res, 200, { ok: true, config: cfg })
+}
+
+// 上传文件名：年月日时分秒-16位随机串.扩展名
+function uploadStamp() {
+  const d = new Date()
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+function randStr(n) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  const bytes = randomBytes(n)
+  let s = ''
+  for (let i = 0; i < n; i++) s += chars[bytes[i] % chars.length]
+  return s
+}
+
+async function apiUpload(url, req, res) {
+  const raw = url.searchParams.get('name') || 'upload.png'
+  const ext = path.extname(raw).toLowerCase() || '.png'
+  if (!IMG_EXTS.has(ext.slice(1))) return sendJSON(res, 400, { error: '只支持图片：' + [...IMG_EXTS].join('/') })
+  const buf = await readBody(req)
+  if (!buf.length) return sendJSON(res, 400, { error: '空文件' })
+  try {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+    const fname = uploadStamp() + '-' + randStr(16) + ext
+    fs.writeFileSync(path.join(UPLOAD_DIR, fname), buf)
+    sendJSON(res, 200, { ok: true, name: fname, url: '/api/uploads/' + fname })
+  } catch (e) {
+    sendJSON(res, 500, { error: '保存失败：' + e.message })
+  }
+}
+
+// 已上传图片列表（文件名以时间戳开头，倒序 = 最新在前）
+function apiUploadsList(res) {
+  let entries = []
+  try { entries = fs.readdirSync(UPLOAD_DIR, { withFileTypes: true }) } catch { entries = [] }
+  const files = entries
+    .filter(e => e.isFile() && IMG_EXTS.has(extOf(e.name)))
+    .map(e => {
+      let st
+      try { st = fs.statSync(path.join(UPLOAD_DIR, e.name)) } catch { return null }
+      return { name: e.name, url: '/api/uploads/' + e.name, size: st.size, mt: fmtMt(st.mtime) }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.name.localeCompare(a.name))
+  sendJSON(res, 200, { files })
+}
+
+// 删除已上传的图片文件
+function apiUploadDelete(target, res) {
+  if (!path.resolve(target).startsWith(path.resolve(UPLOAD_DIR))) {
+    return sendJSON(res, 400, { error: '非法路径' })
+  }
+  try {
+    fs.unlinkSync(target)
+    sendJSON(res, 200, { ok: true })
+  } catch (e) {
+    sendJSON(res, 404, { error: '删除失败：' + e.message })
+  }
 }
 
 // ─────────── 静态文件 ───────────
 function serveStatic(pathname, res) {
-  let file = pathname === '/' ? '/index.html' : pathname
+  const file = pathname === '/' ? '/index.html' : pathname
   const target = path.join(DIST, file)
   if (!target.startsWith(DIST)) return sendText(res, 403, 'forbidden')
-  let buf
-  try { buf = fs.readFileSync(target) } catch {
-    // SPA fallback：未匹配到的路径回退到 index.html
-    try { buf = fs.readFileSync(path.join(DIST, 'index.html')) }
-    catch { return sendText(res, 404, 'dist 不存在，请先 npm run build') }
+  if (fs.existsSync(target) && fs.statSync(target).isFile()) {
+    return sendFile(res, target, MIME[path.extname(target).toLowerCase()])
   }
-  const mime = MIME[path.extname(target).toLowerCase()] || 'application/octet-stream'
-  res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length })
-  res.end(buf)
+  // SPA fallback
+  const idx = path.join(DIST, 'index.html')
+  if (!fs.existsSync(idx)) return sendText(res, 404, 'dist 不存在，请先 npm run build')
+  sendFile(res, idx, MIME['.html'])
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   let url
   try { url = new URL(req.url, 'http://localhost') } catch { return sendText(res, 400, 'bad request') }
   const pathname = decodeURIComponent(url.pathname)
+  const method = req.method || 'GET'
+
+  if (pathname === '/api/config') {
+    if (method === 'POST') return apiConfigSave(req, res)
+    return apiConfigGet(res)
+  }
+  if (pathname === '/api/config/reset' && method === 'POST') return apiConfigReset(res)
+  if (pathname === '/api/upload' && method === 'POST') return apiUpload(url, req, res)
+  if (pathname === '/api/uploads') return apiUploadsList(res)
+  if (pathname.startsWith('/api/uploads/')) {
+    const name = path.basename(pathname) // 防目录穿越
+    const target = path.join(UPLOAD_DIR, name)
+    if (method === 'DELETE') return apiUploadDelete(target, res)
+    // 文件名含时间戳+随机串，内容不变 → 长缓存（利于缩略图复用）
+    return sendFile(res, target, MIME[path.extname(name).toLowerCase()], 'public, max-age=31536000, immutable')
+  }
   if (pathname === '/api/ws') return apiWs(url, res)
   if (pathname === '/api/doc') return apiDoc(url, res)
   if (pathname === '/api/img') return apiImg(url, res)
+
   serveStatic(pathname, res)
 })
 
 server.listen(PORT, () => {
   console.log(`[dir-server] http://localhost:${PORT}/`)
-  console.log(`[dir-server] API: /api/ws?root=<路径>  /api/doc?root=&rel=  /api/img?root=&rel=`)
+  console.log(`[dir-server] 目录: /api/ws /api/doc /api/img`)
+  console.log(`[dir-server] 设置: GET|POST /api/config, POST /api/config/reset`)
+  console.log(`[dir-server] 上传: POST /api/upload?name=x.png  ->  ${UPLOAD_DIR}`)
   console.log(`[dir-server] 托管静态文件: ${DIST}`)
 })

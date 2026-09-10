@@ -1,15 +1,14 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { prefs, workspaces, persist, resetAll, initStore } from '../store/useStore'
+import { ref, computed, onMounted } from 'vue'
+import { prefs, workspaces, persist, resetAll, uploadImage, fetchUploads, deleteUpload } from '../store/useStore'
 import { toast } from '../composables/useToast'
 import { accessToken } from '../access/useAccessGate'
 
 const BASE = import.meta.env.BASE_URL || '/'
-const bgThumbUrl = BASE + 'assets/bg-poem-ridge.jpg'
+const bgThumbUrl = BASE + 'assets/default.jpg'
 
 const presets = [
-  { v: 'ridge', n: '晨雾 · 山色', style: '' },
-  { v: 'night', n: '墨夜 · 山色', style: 'saturate(.5) brightness(.5)' },
+  { v: 'default', n: 'default' },
 ]
 const speeds = [
   { v: 'slow', label: '慢', color: 'oklch(60% 0.06 200)' },
@@ -29,16 +28,80 @@ const previewUrl = computed(() => {
 })
 
 // ── 背景 ──
-function selectBg(p) { prefs.bg = p.v; prefs.bgData = ''; persist(); toast('背景已保存') }
-function onUpload(e) {
+const uploads = ref([])      // 已上传图片列表
+const selected = ref(null)   // 当前选中的背景（待「确定」应用）
+
+const bgOptions = computed(() => {
+  const opts = presets.map(p => ({
+    key: 'preset:' + p.v, type: 'preset', v: p.v, n: p.n, thumb: bgThumbUrl,
+  }))
+  uploads.value.forEach(u => {
+    opts.push({ key: 'upload:' + u.name, type: 'upload', n: u.name, url: u.url, thumb: u.url })
+  })
+  return opts
+})
+
+function isApplied(o) {
+  if (o.type === 'preset') return prefs.bg === o.v
+  return prefs.bg === 'custom' && prefs.bgUrl === o.url
+}
+function isSelected(o) {
+  if (!selected.value) return isApplied(o)
+  if (o.type !== selected.value.type) return false
+  return o.type === 'preset' ? o.v === selected.value.v : o.url === selected.value.url
+}
+function choose(o) {
+  selected.value = o.type === 'preset' ? { type: 'preset', v: o.v } : { type: 'upload', url: o.url }
+}
+function applyBg() {
+  if (!selected.value) { toast('请先选择一张背景图'); return }
+  if (selected.value.type === 'preset') { prefs.bg = selected.value.v; prefs.bgUrl = '' }
+  else { prefs.bg = 'custom'; prefs.bgUrl = selected.value.url }
+  persist()
+  toast('背景已更换')
+}
+async function loadUploads() { uploads.value = await fetchUploads() }
+
+async function onUpload(e) {
   const f = e.target.files && e.target.files[0]
   if (!f) return
-  const rd = new FileReader()
-  rd.onload = () => { prefs.bgData = rd.result; prefs.bg = 'custom'; persist(); toast('背景已更新（保存于本机）') }
-  rd.readAsDataURL(f)
+  try {
+    const up = await uploadImage(f)
+    await loadUploads()
+    selected.value = { type: 'upload', url: up.url } // 自动选中新上传的
+    toast('已上传，点「确定更换背景」生效')
+  } catch (err) {
+    toast(err.message || '上传失败')
+  }
+  e.target.value = '' // 允许重复选择同一文件
 }
-function clearBg() { prefs.bg = 'ridge'; prefs.bgData = ''; persist(); toast('已回到预设背景') }
+function clearBg() {
+  selected.value = { type: 'preset', v: 'default' }
+  prefs.bg = 'default'; prefs.bgUrl = ''
+  persist(); toast('已回到默认背景')
+}
+async function removeUpload(o) {
+  if (!confirm('删除这张图片？服务端的文件也会一并删除。')) return
+  try {
+    await deleteUpload(o.name)
+    if (prefs.bg === 'custom' && prefs.bgUrl === o.url) {
+      prefs.bg = 'default'; prefs.bgUrl = ''; persist()
+    }
+    if (isSelected(o)) selected.value = { type: 'preset', v: 'default' }
+    await loadUploads()
+    toast('已删除')
+  } catch (e) {
+    toast(e.message || '删除失败')
+  }
+}
 function saveVeil() { persist(); toast('遮罩强度已保存') }
+
+onMounted(async () => {
+  await loadUploads()
+  selected.value = (prefs.bg === 'custom' && prefs.bgUrl)
+    ? { type: 'upload', url: prefs.bgUrl }
+    : { type: 'preset', v: 'default' }
+})
 
 // ── 诗句 ──
 function savePoem() {
@@ -79,10 +142,9 @@ function addWs() {
   persist(); toast('已新增工作区')
 }
 
-function doResetAll() {
+async function doResetAll() {
   if (!confirm('恢复默认？将清空自定义工作区与外观设置。')) return
-  resetAll()      // 清空 localStorage
-  initStore()     // 用仍在内存中的解密默认值就地重建
+  await resetAll()   // 服务端重置为 DEFAULT_CONFIG 并回填
   poemText.value = (Array.isArray(prefs.poem) ? prefs.poem : []).join('\n')
   toast('已恢复默认')
 }
@@ -119,18 +181,42 @@ function doResetAll() {
         <section class="panel">
           <div class="panel-title"><h2>首页背景图</h2><span>HERO BACKDROP</span></div>
           <div class="bg-presets">
-            <button v-for="p in presets" :key="p.v" type="button" class="preset" :class="{ on: prefs.bg === p.v }" @click="selectBg(p)">
-              <span class="thumb" :style="{ backgroundImage: `url(${bgThumbUrl})`, filter: p.style || 'none' }"></span>
-              <span class="lbl">{{ p.n }}</span>
-            </button>
+            <div
+              v-for="o in bgOptions"
+              :key="o.key"
+              class="preset"
+              :class="{ sel: isSelected(o), on: isApplied(o) }"
+              role="button"
+              tabindex="0"
+              :title="o.n"
+              @click="choose(o)"
+              @keydown.enter.prevent="choose(o)"
+            >
+              <span class="thumb"><img :src="o.thumb" :alt="o.n" loading="lazy" decoding="async" /></span>
+              <span class="lbl"><span class="nm">{{ o.n }}</span></span>
+              <button
+                v-if="o.type === 'upload'"
+                type="button"
+                class="del"
+                title="删除这张图片"
+                @click.stop="removeUpload(o)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
           </div>
-          <div class="row2">
-            <label class="btn btn-secondary" style="cursor:pointer;justify-content:center;background:transparent;">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+            <label class="btn btn-secondary" style="cursor:pointer;background:transparent;">
               <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7 9m5-5l5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
               上传自定义图片
               <input type="file" accept="image/*" hidden @change="onUpload" />
             </label>
-            <button class="btn btn-ghost" style="border:1px dashed var(--border);" @click="clearBg">清除自定义，回到预设</button>
+            <button class="btn btn-primary" @click="applyBg">确定更换背景</button>
+            <button class="btn btn-ghost" style="border:1px dashed var(--border);" @click="clearBg">恢复预设背景</button>
+          </div>
+          <div class="save-hint">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 13l4 4L19 7"/></svg>
+            点选背景图后按「确定更换背景」生效；带 ✓ 的是当前使用中的。上传的图片存于服务端 data/uploads/。
           </div>
           <div class="range-row field" style="margin-top:16px;">
             <label style="flex:none;">文字层遮罩强度</label>
@@ -218,7 +304,7 @@ function doResetAll() {
           </div>
           <div class="save-hint">
             <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 13l4 4L19 7"/></svg>
-            所有改动自动保存在本机浏览器，返回博客后立即生效。
+            所有改动自动保存到本地服务端（data/config.json），返回博客后立即生效。
           </div>
         </section>
       </div>

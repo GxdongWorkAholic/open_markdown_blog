@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
   <title>open markdown blog</title>
+  <script>
+    // 首屏前先定主题（按北京时间；6:00–18:00 白天，其余深色），避免闪烁
+    (function () {
+      try {
+        var h = Number(new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false
+        }).format(new Date())) % 24
+        var t = (h >= 6 && h < 18) ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', t)
+        document.documentElement.style.colorScheme = t
+      } catch (e) { /* 忽略 */ }
+    })()
+  </script>
 </head>
 <body>
   <div id="app"></div>
