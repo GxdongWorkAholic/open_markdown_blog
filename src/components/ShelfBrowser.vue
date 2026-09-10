@@ -2,16 +2,16 @@
 import { computed } from 'vue'
 import TreeNode from './TreeNode.vue'
 import {
-  workspaces, activeWs, activePath, q,
+  workspaces, activeWs, activePath, q, tree, loading, error,
   setActiveWs, openFolder, openDoc,
-  wsById, wsTree, folderOpenSet, visibleFiles, crumbsFor,
-  nodeCount, DOC_EXTS, TYPE_LABEL, hsize, fmtDate, extOf,
+  wsById, folderOpenSet, visibleFiles, crumbsFor,
+  nodeCount, TYPE_LABEL, hsize, fmtDate, extOf,
 } from '../store/useStore'
 
 const wsMeta = computed(() => wsById(activeWs.value))
-const treeNodes = computed(() => wsTree(activeWs.value))
-const openSet = computed(() => folderOpenSet(activePath.value, activeWs.value))
-const items = computed(() => visibleFiles(activePath.value, q.value, activeWs.value))
+const treeNodes = computed(() => tree.value)
+const openSet = computed(() => folderOpenSet(activePath.value))
+const items = computed(() => visibleFiles(activePath.value, q.value))
 
 const crumbs = computed(() => {
   const ws = wsMeta.value
@@ -26,12 +26,11 @@ const crumbs = computed(() => {
 
 const listCount = computed(() => items.value.length + ' 项' + (q.value ? '（含搜索）' : ''))
 const emptyMsg = computed(() => {
+  if (loading.value) return '正在扫描目录…'
+  if (error.value) return error.value
   if (items.value.length) return ''
   if (q.value) return `没有匹配“${q.value}”的文档。`
-  const ws = wsMeta.value
-  return (ws && !ws.virtual)
-    ? '该目录下没有可直接预览的文档（图片等资源文件不会出现在文档列表中）。'
-    : '该工作区为登记状态，暂无文件快照。'
+  return '该目录下没有文档。'
 })
 
 function fileMeta(n) {
@@ -82,7 +81,9 @@ function dirCount(n) {
         <aside class="tree-pane">
           <div class="tree-pane-title">目录结构</div>
           <div class="tree-path">{{ wsMeta ? wsMeta.root : '' }}</div>
-          <div v-if="treeNodes.length">
+          <div v-if="loading" class="empty" style="padding:24px 10px;">正在扫描目录…</div>
+          <div v-else-if="error" class="empty" style="padding:24px 10px;">{{ error }}</div>
+          <div v-else-if="treeNodes.length">
             <TreeNode
               v-for="n in treeNodes"
               :key="n.p"
@@ -93,7 +94,7 @@ function dirCount(n) {
               @select="openDoc"
             />
           </div>
-          <div v-else class="empty" style="padding:24px 10px;">该工作区没有收录文件。它仅在设置中登记了路径，接入本地目录服务后即可浏览。</div>
+          <div v-else class="empty" style="padding:24px 10px;">该目录下没有文档。</div>
         </aside>
 
         <div class="list-pane">
@@ -138,7 +139,7 @@ function dirCount(n) {
 
       <div class="snapshot-note">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-        <span>工作区以目录快照形式内置演示：md 正文与引用图片随包附带、可真实阅读；目录列表仅展示文档，不含 md 内的图片资源。接入本地服务后即可实时枚举磁盘路径。</span>
+        <span>工作区指向本机目录，由本地目录服务实时扫描：目录树仅展示文档（md / pdf 等），md 正文里引用的图片按相对路径实时加载。到设置页修改工作区路径后，返回首页即可浏览对应目录。</span>
       </div>
     </div>
   </section>

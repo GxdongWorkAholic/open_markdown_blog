@@ -1,13 +1,9 @@
-// 全局状态 —— 从原型 workspace-blog.html / settings.html 的命令式 state 移植为响应式单例
+// 全局状态 —— 实时读取：工作区路径指向本地目录，由 server/index.mjs 扫描并提供正文/图片
 import { reactive, ref } from 'vue'
-import vfsData from '../data/vfs.json'
 
 const LS = 'shijian.blog.v1'
 
-export const vfs = vfsData
-
 export const DOC_EXTS = ['md', 'markdown', 'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'rtf']
-export const IMG_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 export const TYPE_LABEL = {
   md: 'Markdown', pdf: 'PDF', txt: '纯文本', doc: 'Word', docx: 'Word',
   xls: 'Excel', xlsx: 'Excel', ppt: 'PPT', pptx: 'PPT', rtf: 'RTF'
@@ -20,6 +16,11 @@ const DEFAULTS = {
   poem: ['问渠那得清如许', '为有源头活水来', '千淘万漉虽辛苦', '吹尽狂沙始到金', '不积跬步，无以至千里', '不积小流，无以成江海'],
   speed: 'mid', poemSize: 46, tocDefaultHidden: false, readerSize: 17
 }
+// 默认工作区（路径可在设置页改成真实路径，由目录服务实时读取）
+const DEFAULT_WS = [
+  { id: 'mymajor', name: 'mymajor', os: 'win', root: 'E:\\mymicrosoft\\download\\temp\\mymajor', desc: 'Java 后端学习库 · java-doc' },
+  { id: 'mymdrecord', name: 'mymdrecord', os: 'win', root: 'E:\\mymicrosoft\\download\\temp\\mymdrecord', desc: '随手记录 · 分类笔记库' },
+]
 
 export const prefs = reactive({ ...DEFAULTS })
 export const workspaces = ref([])
@@ -27,15 +28,23 @@ export const activeWs = ref(null)
 export const activePath = ref(null)
 export const lastOpened = ref(null)
 export const q = ref('')
-export const view = ref('home') // 'home' | 'reader'
-export const activeRel = ref(null) // 当前打开的文档 rel 路径
+export const view = ref('home')     // 'home' | 'reader'
+export const activeRel = ref(null)  // 当前打开的文档 rel 路径
+
+// 实时数据（来自目录服务）
+export const tree = ref([])          // 当前工作区目录树
+export const loading = ref(false)    // 扫描中
+export const error = ref('')         // 扫描错误信息
+export const docText = ref('')       // 当前文档正文
+export const docLoading = ref(false)
+export const docError = ref('')
+
+// ─────────── 目录服务 API 地址 ───────────
+export function apiWs(root) { return '/api/ws?root=' + encodeURIComponent(root) }
+export function apiDoc(root, rel) { return '/api/doc?root=' + encodeURIComponent(root) + '&rel=' + encodeURIComponent(rel) }
+export function apiImg(root, rel) { return '/api/img?root=' + encodeURIComponent(root) + '&rel=' + encodeURIComponent(rel) }
 
 // ─────────── 工具函数 ───────────
-export function esc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 export function hsize(bytes) {
   if (!bytes && bytes !== 0) return ''
   if (bytes < 1024) return bytes + ' B'
@@ -70,13 +79,6 @@ export function nodeCount(node) {
 export function wsById(id) {
   return workspaces.value.find(w => w.id === id) || null
 }
-export function vwsById(id) {
-  return vfs.workspaces.find(w => w.id === id) || null
-}
-export function wsTree(id) {
-  const vw = vwsById(id)
-  return (vw && vw.tree) || []
-}
 export function findNode(list, path) {
   for (let i = 0; i < list.length; i++) {
     if (list[i].p === path) return list[i]
@@ -84,11 +86,11 @@ export function findNode(list, path) {
   }
   return null
 }
-export function folderOpenSet(sel, id) {
+export function folderOpenSet(sel) {
   const set = {}
-  const tree = wsTree(id)
+  const t = tree.value
   if (!sel) {
-    tree.forEach(n => { if (n.d) set[n.p] = 1 })
+    t.forEach(n => { if (n.d) set[n.p] = 1 })
     return set
   }
   const parts = sel.split('/')
@@ -97,14 +99,14 @@ export function folderOpenSet(sel, id) {
     cur = cur ? cur + '/' + parts[i] : parts[i]
     set[cur] = 1
   }
-  tree.forEach(n => {
+  t.forEach(n => {
     if (n.d && n.d.length && !n.d.some(c => !c.d)) set[n.p] = 1
   })
   return set
 }
-export function visibleFiles(path, query, id) {
+export function visibleFiles(path, query) {
   const list = []
-  const top = wsTree(id)
+  const top = tree.value
   let nodes
   if (!path) nodes = top
   else {
@@ -140,69 +142,84 @@ export function persist() {
 }
 
 // ─────────── 动作 ───────────
+export async function loadTree() {
+  const ws = wsById(activeWs.value)
+  tree.value = []
+  if (!ws) return
+  loading.value = true
+  error.value = ''
+  try {
+    const res = await fetch(apiWs(ws.root))
+    const data = await res.json()
+    tree.value = data.tree || []
+    if (data.error) error.value = data.error
+  } catch (e) {
+    error.value = '无法读取路径 ' + (ws.root || '') + '：' + (e.message || e)
+  } finally {
+    loading.value = false
+  }
+}
+
 export function setActiveWs(id) {
   if (id === activeWs.value) return
   activeWs.value = id
   activePath.value = null
   q.value = ''
   persist()
+  loadTree()
 }
+
 export function openFolder(p) {
   activePath.value = p
   q.value = ''
   persist()
 }
-export function openDoc(rel) {
-  const vw = vwsById(activeWs.value)
-  const doc = (vw && vw.files && vw.files[rel]) || null
+
+export async function openDoc(rel) {
+  const ws = wsById(activeWs.value)
   activePath.value = relDir(rel)
   lastOpened.value = { ws: activeWs.value, rel }
   activeRel.value = rel
   persist()
   view.value = 'reader'
   window.scrollTo(0, 0)
+
+  docLoading.value = true
+  docError.value = ''
+  docText.value = ''
+  if (ws) {
+    try {
+      const res = await fetch(apiDoc(ws.root, rel))
+      const data = await res.json()
+      docText.value = data.text || ''
+      if (data.error) docError.value = data.error
+    } catch (e) {
+      docError.value = '读取失败：' + (e.message || e)
+    }
+  }
+  docLoading.value = false
 }
+
 export function goHome() {
   view.value = 'home'
   window.scrollTo(0, 0)
 }
+
 export function readerScrollTo(id) {
   const el = document.getElementById(id)
   if (!el) return
   const y = el.getBoundingClientRect().top + window.pageYOffset - 84
   window.scrollTo(0, Math.max(0, y))
 }
+
 export function resetAll() {
   try { localStorage.removeItem(LS) } catch { /* ignore */ }
 }
 
-// ─────────── 初始化（在解锁后调用一次） ───────────
-function buildWorkspaces(saved) {
-  // 只保留轻量元数据（name/root/os/desc/virtual）；正文快照 tree/files/images 始终从 vfs 读取。
-  const result = []
-  vfs.workspaces.forEach(p => {
-    const m = saved ? saved.find(s => s.id === p.id) || null : null
-    result.push({
-      id: p.id,
-      name: (m && m.name) || p.name,
-      root: (m && m.root) || p.root,
-      os: (m && m.os) || p.os,
-      desc: (m && m.desc) || p.desc,
-      virtual: m ? !!m.virtual : false,
-    })
-  })
-  if (saved) {
-    saved.forEach(s => {
-      if (!vfs.workspaces.some(p => p.id === s.id)) result.push({ ...s })
-    })
-  }
-  return result
-}
-
+// ─────────── 初始化 ───────────
 export function initStore() {
   const state = loadRaw()
 
-  // 外观默认值：公共默认值 + localStorage 覆盖（与原版 boot 一致）
   const defaults = { ...DEFAULTS }
   const savedPrefs = (state && state.prefs && typeof state.prefs === 'object') ? state.prefs : {}
   for (const k in defaults) {
@@ -211,7 +228,12 @@ export function initStore() {
     else prefs[k] = defaults[k]
   }
 
-  workspaces.value = reactive(buildWorkspaces((state && state.workspaces) || null))
+  const savedWs = (state && state.workspaces) || null
+  workspaces.value = reactive(
+    (savedWs && savedWs.length)
+      ? JSON.parse(JSON.stringify(savedWs))
+      : JSON.parse(JSON.stringify(DEFAULT_WS))
+  )
 
   let keep = null
   const want = state && state.activeWs
@@ -222,4 +244,6 @@ export function initStore() {
   lastOpened.value = (state && state.lastOpened) || null
   view.value = 'home'
   activeRel.value = null
+
+  loadTree()
 }

@@ -1,6 +1,4 @@
-// Markdown 渲染器 —— 从原型 workspace-blog.html 的 mdToHtml/inlineMd/resolveImg 逐行移植
-// 输出 HTML 字符串，供 v-html 使用；行为与原版一致。
-
+// Markdown 渲染器 —— 实时读取版：本地图片经目录服务 /api/img 提供，外部图片直出
 export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -11,15 +9,12 @@ function uid(rel) {
   return 'h-' + rel.replace(/[^\w一-龥]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'sec'
 }
 
-// 把快照里的图片相对 URL（如 ./img/...）规范为以 BASE 开头的绝对路径，
-// 避免在 /settings 等子路由下相对解析错位。
-export function assetUrl(u) {
-  if (!u) return ''
-  if (/^(https?:|data:)/.test(u)) return u
-  return (import.meta.env.BASE_URL || '/') + String(u).replace(/^\.\//, '')
+// 本地图片 URL：由目录服务按工作区 root + 相对路径提供
+function imgUrl(root, rel) {
+  return '/api/img?root=' + encodeURIComponent(root) + '&rel=' + encodeURIComponent(rel)
 }
 
-// 规范化 md 正文里图片的相对引用路径（处理 ../ 与 .），返回快照 images 映射的 key。
+// 规范化 md 正文里图片的相对引用路径（处理 ../ 与 .），返回相对工作区 root 的路径
 function resolveImg(rel, docDir) {
   if (/^(https?:|data:)/.test(rel)) return null
   const joined = (docDir ? docDir + '/' : '') + rel
@@ -34,16 +29,18 @@ function resolveImg(rel, docDir) {
   return parts.join('/')
 }
 
-function inlineMd(txt, docDir, ws) {
+function inlineMd(txt, docDir, root) {
   let s = esc(txt)
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (m, alt, url) {
+    if (/^(https?:|data:)/.test(url)) {
+      return '<figure><img class="md-img" src="' + esc(url) + '" alt="' + esc(alt || '') + '" loading="lazy"><figcaption>' + esc(alt || '') + '</figcaption></figure>'
+    }
     const imgRel = resolveImg(url, docDir)
-    const img = (imgRel && ws && ws.images && ws.images[imgRel]) || null
-    if (img) {
-      return '<figure><img class="md-img" src="' + assetUrl(img.u) + '" alt="' + esc(alt || '') + '" loading="lazy"><figcaption>' + esc(alt || '') + '</figcaption></figure>'
+    if (imgRel) {
+      return '<figure><img class="md-img" src="' + imgUrl(root, imgRel) + '" alt="' + esc(alt || '') + '" loading="lazy"><figcaption>' + esc(alt || '') + '</figcaption></figure>'
     }
     return '<figure><img class="missing" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="图片缺失">' +
-      '<figcaption>[' + esc(alt || imgRel || url) + ' · 图片未随包收录]</figcaption></figure>'
+      '<figcaption>[' + esc(alt || url) + ' · 图片无法解析]</figcaption></figure>'
   })
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, function (m, t, u) {
     if (t && /^(https?:|mailto:|#)/.test(u)) return '<a href="' + esc(u) + '" target="_blank" rel="noreferrer">' + t + '</a>'
@@ -56,7 +53,7 @@ function inlineMd(txt, docDir, ws) {
   return s
 }
 
-export function mdToHtml(md, docDir, ws) {
+export function mdToHtml(md, docDir, root) {
   const headings = []
   const lines = md.replace(/\r\n?/g, '\n').split('\n')
   let i = 0
@@ -70,16 +67,16 @@ export function mdToHtml(md, docDir, ws) {
   const hcount = {}
 
   function flushPara() {
-    if (para.length) { out.push('<p>' + inlineMd(para.join(' '), docDir, ws) + '</p>'); para = [] }
+    if (para.length) { out.push('<p>' + inlineMd(para.join(' '), docDir, root) + '</p>'); para = [] }
   }
   function flushTable() {
     if (!tableRows.length) return
     const head = tableRows.shift()
     let html = '<div style="overflow:auto;"><table><thead><tr>' +
-      head.split('|').filter(c => c.trim() !== '').map(c => '<th>' + inlineMd(c.trim(), docDir, ws) + '</th>').join('') +
+      head.split('|').filter(c => c.trim() !== '').map(c => '<th>' + inlineMd(c.trim(), docDir, root) + '</th>').join('') +
       '</tr></thead><tbody>'
     tableRows.forEach(r => {
-      html += '<tr>' + r.split('|').filter(c => c.trim() !== '').map(c => '<td>' + inlineMd(c.trim(), docDir, ws) + '</td>').join('') + '</tr>'
+      html += '<tr>' + r.split('|').filter(c => c.trim() !== '').map(c => '<td>' + inlineMd(c.trim(), docDir, root) + '</td>').join('') + '</tr>'
     })
     html += '</tbody></table></div>'
     out.push(html); tableRows = []; inTable = false
@@ -113,7 +110,7 @@ export function mdToHtml(md, docDir, ws) {
       const n = hcount[key] = (hcount[key] || 0) + 1
       const id = uid(docDir + '|' + txt + (n > 1 ? '-' + n : ''))
       headings.push({ lvl, text: txt, id })
-      out.push('<h' + lvl + ' id="' + id + '">' + inlineMd(txt, docDir, ws) + '</h' + lvl + '>')
+      out.push('<h' + lvl + ' id="' + id + '">' + inlineMd(txt, docDir, root) + '</h' + lvl + '>')
       continue
     }
     if (/^\|/.test(trim) && /\|$/.test(trim)) {
@@ -136,7 +133,7 @@ export function mdToHtml(md, docDir, ws) {
       const qs = []
       while (i < lines.length && /^>/.test(lines[i].trim())) { qs.push(lines[i].trim().replace(/^>\s?/, '')); i++ }
       i--
-      out.push('<blockquote>' + inlineMd(qs.join(' '), docDir, ws) + '</blockquote>')
+      out.push('<blockquote>' + inlineMd(qs.join(' '), docDir, root) + '</blockquote>')
       continue
     }
     if ((m = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(ln)) && m[3].length) {
@@ -144,7 +141,7 @@ export function mdToHtml(md, docDir, ws) {
       const ordered = /\d+\./.test(m[2])
       const tag = ordered ? 'ol' : 'ul'
       if (listType !== tag) { if (listType) out.push('</' + listType + '>'); out.push('<' + tag + '>'); listType = tag }
-      out.push('<li>' + inlineMd(m[3], docDir, ws) + '</li>')
+      out.push('<li>' + inlineMd(m[3], docDir, root) + '</li>')
       continue
     }
     if (listType && !/^\s*([-*+]|\d+\.)\s+/.test(ln)) { out.push('</' + listType + '>'); listType = null }

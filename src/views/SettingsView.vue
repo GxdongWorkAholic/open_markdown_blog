@@ -73,7 +73,7 @@ function addWs() {
   if (!name || !path) { toast('请填写名称与路径'); return }
   const os = newWsOs.value
   const id = 'u-' + Date.now().toString(36)
-  workspaces.value.push({ id, name, root: path, os, desc: '由设置新增 · 待接入本地目录服务', virtual: true })
+  workspaces.value.push({ id, name, root: path, os, desc: '由设置新增' })
   newWsName.value = ''
   newWsPath.value = ''
   persist(); toast('已新增工作区')
@@ -173,10 +173,9 @@ function doResetAll() {
               <div class="ws-name">
                 {{ ws.name }}
                 <span class="os-badge" :class="ws.os === 'linux' ? 'linux' : 'win'"><span class="dot"></span>{{ ws.os === 'linux' ? 'LINUX' : 'WIN' }}</span>
-                <span v-if="!ws.virtual" class="tag">示例</span>
               </div>
               <div class="ws-path">{{ ws.root }}</div>
-              <div class="ws-desc">{{ ws.desc || (ws.virtual ? '登记路径的工作区，待接入本地目录服务。' : '内置目录快照，博客中可完整阅读。') }}</div>
+              <div class="ws-desc">{{ ws.desc || '' }}</div>
             </div>
             <div class="ws-edit">
               <input class="input" :value="ws.name" aria-label="名称" @change="onWsField(ws, 'name', $event)" />
@@ -192,7 +191,7 @@ function doResetAll() {
           </div>
           <div class="inline-tip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
-            <span>每个工作区对应本机一个目录：标注其系统环境（Windows / Linux）并填入真实路径。浏览器无法直接枚举磁盘目录，因此博客页面内置了两个工作区的目录与正文快照（标注「示例」）；删除某个工作区后，博客右上角的分区中就不再显示它。接入带目录服务的本地服务器后，即可实时读取任意路径。</span>
+            <span>每个工作区对应本机一个目录：标注其系统环境（Windows / Linux）并填入真实路径。由本地目录服务（node server/index.mjs）实时扫描该路径，读取目录树、md 正文与引用图片。删除某个工作区后，博客右上角的分区中就不再显示它。</span>
           </div>
           <div class="add-row">
             <input class="input" v-model="newWsName" placeholder="工作区名称，如 mynotes" aria-label="工作区名称" />
