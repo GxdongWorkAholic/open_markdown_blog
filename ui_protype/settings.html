@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>open markdown blog · 设置</title>
+<style>
+  :root {
+    --bg:      oklch(98% 0.004 95);
+    --surface: oklch(100% 0.002 95);
+    --fg:      oklch(20% 0.018 70);
+    --muted:   oklch(48% 0.012 70);
+    --border:  oklch(90% 0.006 95);
+    --accent:  oklch(52% 0.10 28);
+
+    --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
+    --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+    --font-display: 'Iowan Old Style', Charter, Georgia, 'Noto Serif SC', 'Songti SC', 'SimSun', 'STSong', serif;
+    --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-mono:    ui-monospace, 'SF Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+    --fs-h1: clamp(28px, 4.4vw, 46px);
+    --container: 1000px;
+    --gutter: clamp(20px, 4vw, 40px);
+    --gap-sm: 12px; --gap-md: 20px; --gap-lg: 32px;
+    --radius: 10px;
+    --topbar-h: 60px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.62;
+    text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
+  }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; border: 0; background: none; color: inherit; padding: 0; }
+  input, select, textarea { font: inherit; color: inherit; }
+  h1, h2, h3, h4, p { text-wrap: balance; }
+  p { margin: 0; }
+  ::selection { background: var(--accent-soft); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+  .mono { font-family: var(--font-mono); }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em;
+    color: var(--accent); text-transform: uppercase; margin: 0 0 var(--gap-sm);
+  }
+  .icon { width: 18px; height: 18px; flex: none; }
+  .icon-sm { width: 16px; height: 16px; flex: none; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 18px; min-height: 42px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+    font-size: 14.5px; font-weight: 500; white-space: nowrap;
+    transition: background .15s ease, border-color .15s ease, transform .05s ease;
+  }
+  .btn:hover { border-color: var(--fg); }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .btn-primary:hover { background: color-mix(in oklch, var(--accent) 86%, black); border-color: var(--accent); }
+  .btn-secondary { background: transparent; }
+  .btn-secondary:hover { background: var(--fg-soft); border-color: var(--border); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn-ghost:hover { background: var(--fg-soft); border-color: transparent; color: var(--fg); }
+
+  .tag {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em;
+    padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+
+  .reader-top {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in oklch, var(--bg) 90%, transparent);
+    backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+  }
+  .reader-top-in { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); min-height: var(--topbar-h); }
+  .reader-back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; padding: 8px 10px; border-radius: 8px; }
+  .reader-back:hover { color: var(--fg); background: var(--fg-soft); }
+  .reader-top .docname { font-size: 15px; font-weight: 600; }
+  .reader-acts { display: flex; align-items: center; gap: 10px; min-width: 120px; justify-content: flex-end; }
+  .reader-acts a { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; }
+  .reader-acts a:hover { color: var(--fg); background: var(--fg-soft); }
+
+  .settings { padding-top: 0; padding-bottom: 120px; }
+  .settings-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--gap-md); flex-wrap: wrap; padding-top: clamp(28px, 4.6vw, 48px); margin-bottom: 8px; }
+  .settings-head h1 { font-family: var(--font-display); font-size: var(--fs-h1); margin: 6px 0 0; letter-spacing: -0.01em; }
+  .cards { display: grid; gap: var(--gap-lg); margin-top: var(--gap-lg); }
+  .panel { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: 24px 26px; box-shadow: 0 1px 0 var(--border); }
+  .panel > .panel-title { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+  .panel > .panel-title h2 { font-family: var(--font-display); font-size: 20px; margin: 0; }
+  .panel > .panel-title span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.1em; }
+  .field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+  .field label { font-size: 13.5px; color: var(--muted); font-weight: 500; }
+  .input, .textarea, select.input {
+    width: 100%; padding: 10px 13px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg); font-size: 14.5px;
+  }
+  .input:focus, .textarea:focus, select.input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .textarea { min-height: 140px; resize: vertical; line-height: 1.8; font-family: var(--font-display); }
+  .bg-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 4px 0 14px; }
+  .bg-presets .preset { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); text-align: left; }
+  .bg-presets .preset .thumb { height: 92px; background-size: cover; background-position: center; position: relative; }
+  .bg-presets .preset .thumb::after { content: ""; position: absolute; inset: 0; border-bottom: 1px solid var(--border); }
+  .bg-presets .preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .bg-presets .preset .lbl { padding: 9px 12px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .bg-presets .preset.on .lbl::after { content: "✓"; color: var(--accent); font-weight: 700; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .row2 { grid-template-columns: 1fr; } }
+  .range-row { display: flex; align-items: center; gap: 14px; }
+  .range-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .range-row output { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); min-width: 42px; text-align: right; }
+  .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px; font-size: 13.5px; color: var(--muted);
+    background: var(--surface); display: inline-flex; align-items: center; gap: 8px;
+  }
+  .chip.on { border-color: var(--accent); color: color-mix(in oklch, var(--accent) 82%, var(--fg)); background: var(--accent-soft); }
+  .chip .sw { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); flex: none; }
+  .chip.on .sw { border-color: color-mix(in oklch, var(--accent) 40%, transparent); }
+
+  .ws-row { display: flex; align-items: flex-start; gap: 16px; padding: 18px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .ws-row:first-of-type { border-top: 0; }
+  .ws-grip { color: var(--muted); margin-top: 4px; }
+  .ws-main { flex: 1; min-width: 230px; }
+  .ws-name { font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 10px; }
+  .ws-path { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+  .ws-desc { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .os-badge { font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+  .os-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .os-badge.win .dot { background: oklch(62% 0.14 225); }
+  .os-badge.linux .dot { background: oklch(65% 0.16 110); }
+  .ws-edit { flex: 1; min-width: 300px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; }
+  .ws-edit input, .ws-edit select { padding: 8px 11px; font-size: 13.5px; }
+  .ws-edit input.path { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 12.5px; }
+  .ws-del { color: var(--muted); flex: none; align-self: center; border: 1px solid transparent; }
+  .ws-del:hover { color: var(--fg); border-color: var(--border); background: var(--fg-soft); }
+  .save-hint { margin-top: 16px; color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .add-row { display: grid; grid-template-columns: 150px 110px 1fr auto; gap: 10px; align-items: end; margin-top: 12px; }
+  @media (max-width: 760px) { .add-row { grid-template-columns: 1fr 1fr; } }
+  .inline-tip { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; padding: 13px 16px; border-radius: 12px; background: var(--fg-soft); color: var(--muted); font-size: 13px; line-height: 1.8; }
+  .inline-tip svg { width: 17px; height: 17px; color: var(--accent); margin-top: 3px; flex: none; }
+  .pagefoot { border-top: 1px solid var(--border); padding: 22px 0; color: var(--muted); font-size: 12.5px; }
+  .pagefoot .inner { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); flex-wrap: wrap; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 14px); z-index: 60;
+    background: var(--fg); color: var(--surface); padding: 10px 18px; border-radius: 999px;
+    font-size: 13.5px; opacity: 0; pointer-events: none; transition: all .25s ease;
+    box-shadow: 0 12px 30px -12px color-mix(in oklch, var(--fg) 50%, transparent);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 620px) {
+    .bg-presets { grid-template-columns: 1fr; }
+    .reader-acts { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="reader-top" data-od-id="settings-topbar">
+  <div class="container reader-top-in">
+    <a class="reader-back" id="btn-settings-back" href="workspace-blog.html" data-od-id="settings-back">
+      <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 5l-7 7 7 7"/></svg>
+      返回博客
+    </a>
+    <div style="min-width:0;text-align:center;"><span class="docname">设置</span></div>
+    <div class="reader-acts">
+      <a href="workspace-blog.html" target="_blank" rel="noreferrer">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>
+        另开博客预览
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="container settings">
+  <div class="settings-head">
+    <div>
+      <p class="eyebrow">SETTINGS · 设置</p>
+      <h1>外观 · 文字 · 工作区</h1>
+    </div>
+    <button class="btn btn-secondary" id="btn-reset-all" data-od-id="reset-all">恢复默认</button>
+  </div>
+
+  <div class="cards">
+    <section class="panel" data-od-id="panel-background">
+      <div class="panel-title"><h2>首页背景图</h2><span>HERO BACKDROP</span></div>
+      <div class="bg-presets" id="bg-presets"></div>
+      <div class="row2">
+        <label class="btn btn-secondary" style="cursor:pointer;justify-content:center;background:transparent;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7 9m5-5l5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          上传自定义图片
+          <input type="file" id="bg-upload" accept="image/*" hidden />
+        </label>
+        <button class="btn btn-ghost" id="btn-bg-clear" data-od-id="bg-clear" style="border:1px dashed var(--border);">清除自定义，回到预设</button>
+      </div>
+      <div class="range-row field" style="margin-top:16px;">
+        <label style="flex:none;">文字层遮罩强度</label>
+        <input type="range" id="bg-veil" min="0" max="1" step="0.05" value="0.5" />
+        <output id="bg-veil-out">50%</output>
+      </div>
+    </section>
+
+    <section class="panel" data-od-id="panel-poem">
+      <div class="panel-title"><h2>诗页文字</h2><span>POEM TYPE</span></div>
+      <div class="field">
+        <label for="poem-lines">诗句内容（每行一句，将逐字打出后抹去，循环播放）</label>
+        <textarea class="textarea" id="poem-lines" spellcheck="false"></textarea>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>字号</label>
+          <div class="range-row">
+            <input type="range" id="poem-size" min="26" max="72" step="1" />
+            <output id="poem-size-out"></output>
+          </div>
+        </div>
+        <div class="field">
+          <label>打字速度</label>
+          <div class="chip-group" id="poem-speed">
+            <button class="chip" data-v="slow"><span class="sw" style="background:oklch(60% 0.06 200);"></span>慢</button>
+            <button class="chip" data-v="mid"><span class="sw" style="background:oklch(60% 0.06 150);"></span>中</button>
+            <button class="chip" data-v="fast"><span class="sw" style="background:oklch(60% 0.09 90);"></span>快</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-od-id="panel-workspaces">
+      <div class="panel-title"><h2>工作区管理</h2><span>WORKSPACES · WIN / LINUX</span></div>
+      <div id="ws-list"></div>
+      <div class="inline-tip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <span>每个工作区对应本机一个目录：标注其系统环境（Windows / Linux）并填入真实路径。浏览器无法直接枚举磁盘目录，因此博客页面内置了两个工作区的目录与正文快照（标注「示例」）；删除某个工作区后，博客右上角的分区中就不再显示它。接入带目录服务的本地服务器后，即可实时读取任意路径。</span>
+      </div>
+      <div class="add-row">
+        <input class="input" id="new-ws-name" placeholder="工作区名称，如 mynotes" aria-label="工作区名称" />
+        <select class="input" id="new-ws-os" aria-label="系统环境">
+          <option value="win">Windows</option>
+          <option value="linux">Linux</option>
+        </select>
+        <input class="input" id="new-ws-path" placeholder="绝对路径，如 E:\notes  或 /home/me/notes" aria-label="绝对路径" style="font-family:var(--font-mono);font-size:13px;" />
+        <button class="btn btn-primary" id="btn-add-ws" data-od-id="add-ws">新增工作区</button>
+      </div>
+    </section>
+
+    <section class="panel" data-od-id="panel-reader">
+      <div class="panel-title"><h2>阅读器</h2><span>READER</span></div>
+      <div class="chip-group">
+        <button class="chip" id="chk-toc-default" data-od-id="toc-default">打开文档时默认收起「本页目录」</button>
+      </div>
+      <div class="field" style="margin-top:18px;">
+        <label for="reader-size">正文字号</label>
+        <div class="range-row">
+          <input type="range" id="reader-size" min="14" max="22" step="1" />
+          <output id="reader-size-out"></output>
+        </div>
+      </div>
+      <div class="save-hint" id="save-hint">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 13l4 4L19 7"/></svg>
+        所有改动自动保存在本机浏览器，返回博客后立即生效。
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<footer class="pagefoot" data-od-id="settings-footer">
+  <div class="container inner">
+    <span>open markdown blog — 设置页</span>
+    <span class="mono" style="font-size:12px;">workspace-blog.html + settings.html · 同一份本地设置</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var LS = "shijian.blog.v1";
+  var DEFAULTS = {
+    bg: "ridge", bgData: "", veil: 0.5,
+    poem: ["问渠那得清如许", "为有源头活水来", "千淘万漉虽辛苦", "吹尽狂沙始到金", "不积跬步，无以至千里", "不积小流，无以成江海"],
+    speed: "mid", poemSize: 46, tocDefaultHidden: false, readerSize: 17
+  };
+  var DEFAULT_WS = [
+    { id: "mymajor", name: "mymajor", os: "win", root: "E:\\mymicrosoft\\download\\temp\\mymajor", desc: "Java 后端学习库 · java-doc，含 16 个主题章节" },
+    { id: "mymdrecord", name: "mymdrecord", os: "win", root: "E:\\mymicrosoft\\download\\temp\\mymdrecord", desc: "随手记录 · 分类笔记库，含参考图资源" }
+  ];
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function toast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 1600);
+  }
+  function loadRaw() {
+    try { return JSON.parse(localStorage.getItem(LS) || "null"); }
+    catch (e) { return null; }
+  }
+
+  var state = loadRaw();
+  var prefs = {};
+  (function () {
+    var saved = (state && state.prefs && typeof state.prefs === "object") ? state.prefs : {};
+    for (var k in DEFAULTS) {
+      if (saved[k] != null) prefs[k] = saved[k];
+      else if (state && state[k] != null) prefs[k] = state[k];
+      else prefs[k] = DEFAULTS[k];
+    }
+  })();
+  var workspaces = (state && state.workspaces && state.workspaces.length)
+    ? state.workspaces
+    : JSON.parse(JSON.stringify(DEFAULT_WS));
+
+  function saveAll() {
+    var s = { prefs: prefs, workspaces: workspaces };
+    ["activeWs", "activePath", "lastOpened"].forEach(function (k) {
+      if (state && state[k] != null) s[k] = state[k];
+    });
+    try { localStorage.setItem(LS, JSON.stringify(s)); }
+    catch (e) { toast("保存失败：本机存储空间不足"); }
+  }
+
+  function settingsSync() {
+    document.getElementById("poem-lines").value = (Array.isArray(prefs.poem) ? prefs.poem : []).join("\n");
+    document.getElementById("poem-size").value = prefs.poemSize;
+    document.getElementById("poem-size-out").textContent = prefs.poemSize + "px";
+    document.getElementById("reader-size").value = prefs.readerSize;
+    document.getElementById("reader-size-out").textContent = prefs.readerSize + "px";
+    document.getElementById("bg-veil").value = prefs.veil;
+    document.getElementById("bg-veil-out").textContent = Math.round(prefs.veil * 100) + "%";
+    document.querySelectorAll("#poem-speed .chip").forEach(function (c) {
+      c.classList.toggle("on", c.getAttribute("data-v") === prefs.speed);
+    });
+    document.getElementById("chk-toc-default").classList.toggle("on", !!prefs.tocDefaultHidden);
+    renderBgPresets();
+    renderWsList();
+  }
+  function renderBgPresets() {
+    var host = document.getElementById("bg-presets");
+    var presets = [
+      { v: "ridge", n: "晨雾 · 山色", cls: "assets/bg-poem-ridge.jpg", style: "" },
+      { v: "night", n: "墨夜 · 山色", cls: "assets/bg-poem-ridge.jpg", style: "saturate(.5) brightness(.5)" }
+    ];
+    host.innerHTML = "";
+    presets.forEach(function (p) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "preset" + (prefs.bg === p.v ? " on" : "");
+      b.innerHTML = '<span class="thumb" style="background-image:url(' + p.cls + ');filter:' + (p.style || "none") + ';"></span>' +
+        '<span class="lbl">' + p.n + "</span>";
+      b.onclick = function () { prefs.bg = p.v; prefs.bgData = ""; saveAll(); settingsSync(); toast("背景已保存"); };
+      host.appendChild(b);
+    });
+  }
+  function renderWsList() {
+    var host = document.getElementById("ws-list");
+    if (!workspaces.length) { host.innerHTML = '<div class="empty">还没有工作区，请在下方新增。</div>'; return; }
+    host.innerHTML = "";
+    workspaces.forEach(function (ws, idx) {
+      var row = document.createElement("div");
+      row.className = "ws-row";
+      row.setAttribute("data-od-id", "ws-row-" + (ws.name || idx).replace(/[^\w\u4e00-\u9fa5]+/g, "-"));
+      var sample = !ws.virtual;
+      row.innerHTML =
+        '<svg class="ws-grip icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 8h16M4 16h16"/></svg>' +
+        '<div class="ws-main"><div class="ws-name">' + esc(ws.name) + ' <span class="os-badge ' + (ws.os === "linux" ? "linux" : "win") + '"><span class="dot"></span>' + (ws.os === "linux" ? "LINUX" : "WIN") + "</span>" + (sample ? ' <span class="tag">示例</span>' : "") + '</div>' +
+        '<div class="ws-path">' + esc(ws.root || "") + "</div>" +
+        '<div class="ws-desc">' + esc(ws.desc || (sample ? "内置目录快照，博客中可完整阅读。" : "登记路径的工作区，待接入本地目录服务。")) + "</div></div>" +
+        '<div class="ws-edit"><input class="input" data-f="name" value="' + esc(ws.name) + '" aria-label="名称" />' +
+        '<select class="input" data-f="os" aria-label="系统"><option value="win"' + (ws.os !== "linux" ? " selected" : "") + ">Windows</option><option value=\"linux\"" + (ws.os === "linux" ? " selected" : "") + ">Linux</option></select>" +
+        '<input class="input path" data-f="root" value="' + esc(ws.root || "") + '" placeholder="绝对路径" aria-label="路径" /></div>' +
+        '<button class="btn btn-ghost ws-del" aria-label="删除"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>删除</button>';
+      host.appendChild(row);
+
+      row.querySelectorAll("[data-f]").forEach(function (inp) {
+        inp.addEventListener("change", function () {
+          var f = inp.getAttribute("data-f");
+          if (f === "name" && !inp.value.trim()) { toast("名称不能为空"); inp.value = ws.name; return; }
+          if (f === "root" && !inp.value.trim()) { toast("请填写路径"); inp.value = ws.root || ""; return; }
+          ws[f === "os" ? "os" : f] = inp.value.trim ? inp.value.trim() : inp.value;
+          saveAll();
+          if (f === "name" || f === "os") { renderWsList(); }
+          toast("已保存");
+        });
+      });
+      row.querySelector(".ws-del").addEventListener("click", function () {
+        if (!confirm("删除工作区“" + ws.name + "”？其设置将从本机移除，博客分区中将不再显示它。")) return;
+        workspaces.splice(idx, 1);
+        saveAll(); renderWsList();
+        toast("已删除");
+      });
+    });
+  }
+
+  function bind() {
+    document.getElementById("btn-reset-all").addEventListener("click", function () {
+      if (!confirm("恢复默认？将清空自定义工作区与外观设置。")) return;
+      try { localStorage.removeItem(LS); } catch (e) {}
+      location.reload();
+    });
+
+    var poemT = document.getElementById("poem-lines");
+    poemT.addEventListener("change", function () {
+      prefs.poem = poemT.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+      saveAll(); toast("诗句已保存");
+    });
+    var poemSize = document.getElementById("poem-size");
+    poemSize.addEventListener("input", function (e) {
+      document.getElementById("poem-size-out").textContent = e.target.value + "px";
+    });
+    poemSize.addEventListener("change", function (e) {
+      prefs.poemSize = +e.target.value; saveAll(); toast("字号已保存");
+    });
+    document.querySelectorAll("#poem-speed .chip").forEach(function (c) {
+      c.addEventListener("click", function () {
+        prefs.speed = c.getAttribute("data-v"); saveAll(); settingsSync(); toast("打字速度已保存");
+      });
+    });
+    var readerSize = document.getElementById("reader-size");
+    readerSize.addEventListener("input", function (e) {
+      document.getElementById("reader-size-out").textContent = e.target.value + "px";
+    });
+    readerSize.addEventListener("change", function (e) {
+      prefs.readerSize = +e.target.value; saveAll(); toast("正文字号已保存");
+    });
+    var veil = document.getElementById("bg-veil");
+    veil.addEventListener("input", function (e) {
+      document.getElementById("bg-veil-out").textContent = Math.round(+e.target.value * 100) + "%";
+    });
+    veil.addEventListener("change", function (e) {
+      prefs.veil = +e.target.value; saveAll(); toast("遮罩强度已保存");
+    });
+    document.getElementById("bg-upload").addEventListener("change", function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        prefs.bgData = rd.result; prefs.bg = "custom";
+        saveAll(); settingsSync();
+        toast("背景已更新（保存于本机）");
+      };
+      rd.readAsDataURL(f);
+    });
+    document.getElementById("btn-bg-clear").addEventListener("click", function () {
+      prefs.bg = "ridge"; prefs.bgData = "";
+      saveAll(); settingsSync(); toast("已回到预设背景");
+    });
+    document.getElementById("chk-toc-default").addEventListener("click", function () {
+      prefs.tocDefaultHidden = !prefs.tocDefaultHidden; saveAll(); settingsSync();
+    });
+    document.getElementById("btn-add-ws").addEventListener("click", function () {
+      var name = document.getElementById("new-ws-name").value.trim();
+      var path = document.getElementById("new-ws-path").value.trim();
+      if (!name || !path) { toast("请填写名称与路径"); return; }
+      var os = document.getElementById("new-ws-os").value;
+      var id = "u-" + Date.now().toString(36);
+      workspaces.push({ id: id, name: name, root: path, os: os, desc: "由设置新增 · 待接入本地目录服务", virtual: true });
+      document.getElementById("new-ws-name").value = "";
+      document.getElementById("new-ws-path").value = "";
+      saveAll(); renderWsList();
+      toast("已新增工作区");
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () { bind(); settingsSync(); });
+})();
+</script>
+</body>
+</html>
