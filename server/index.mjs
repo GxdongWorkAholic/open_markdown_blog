@@ -14,6 +14,7 @@ const DIST = path.join(ROOT, 'dist')
 const DATA_DIR = path.join(ROOT, 'data')
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json')
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads')  // 图片上传的默认路径
+const HOST = process.env.HOST || '0.0.0.0'   // 反代部署时设 127.0.0.1，只监听本机
 const PORT = Number(process.env.PORT || 8787)
 
 const DOC_EXTS = new Set(['md', 'markdown', 'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'rtf'])
@@ -337,8 +338,9 @@ const server = http.createServer(async (req, res) => {
   serveStatic(pathname, res)
 })
 
-server.listen(PORT, () => {
-  console.log(`[dir-server] http://localhost:${PORT}/`)
+server.listen(PORT, HOST, () => {
+  const shown = HOST === '0.0.0.0' ? 'localhost' : HOST
+  console.log(`[dir-server] http://${shown}:${PORT}/`)
   console.log(`[dir-server] 目录: /api/ws /api/doc /api/img`)
   console.log(`[dir-server] 设置: GET|POST /api/config, POST /api/config/reset`)
   console.log(`[dir-server] 上传: POST /api/upload?name=x.png  ->  ${UPLOAD_DIR}`)
