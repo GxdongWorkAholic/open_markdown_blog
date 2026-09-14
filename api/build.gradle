@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.3'
+}
+
+group = 'com.gxdong'
+version = '1.0.0'
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // 中文注释与中文用户文案全靠这一行
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    systemProperty 'file.encoding', 'UTF-8'
+}
+
+dependencies {
+    // 用 BOM 而不是 io.spring.dependency-management 插件：少一个插件，
+    // 而且 spring-boot-dependencies:3.5.3 已经在本地仓库里了。
+    implementation platform('org.springframework.boot:spring-boot-dependencies:3.5.3')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 中文文件名的排序必须与旧 Node 服务逐位一致，而它用的是 ICU。
+    // JDK 自带的 Collator 有两处对不上（实测）：
+    //   1) CLDR 的 zh 有 [reorder Hani] 把汉字提到拉丁之前，Java 的 Collator 不应用这条
+    //   2) Java 的 Collator 默认把标点当可忽略元素，而 ECMAScript 的 localeCompare
+    //      （ignorePunctuation:false）不是
+    // 直接引入同一个库，比手写比较器去凑两条规则可靠得多。代价是 +14.6MB（jar 从 26MB 变成 40MB）。
+    implementation 'com.ibm.icu:icu4j:76.1'
+
+    runtimeOnly 'com.h2database:h2'
+
+    // 刻意不加 spring-boot-starter-test：它不在本地仓库，
+    // 且本项目的验收手段是「与旧 Node 服务逐端点对拍」，不是 JUnit。
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'blog-api.jar'
+}
+
+tasks.named('jar') {
+    enabled = false   // 只要可执行的 bootJar，不要那个多余的普通 jar
+}

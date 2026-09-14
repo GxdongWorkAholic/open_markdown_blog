@@ -1,0 +1,33 @@
+{
+  "prefs": {
+    "bg": "default",
+    "bgUrl": "",
+    "veil": 0.5,
+    "poem": ["回归测试"],
+    "speed": "mid",
+    "poemSize": 46,
+    "tocDefaultHidden": false,
+    "readerSize": 17,
+    "icpOn": false,
+    "icpText": "",
+    "icpUrl": "https://beian.miit.gov.cn"
+  },
+  "workspaces": [
+    {
+      "id": "mymajor",
+      "name": "mymajor",
+      "os": "win",
+      "root": "D:\\notes\\mymajor",
+      "desc": "回归测试用"
+    },
+    {
+      "id": "mymdrecord",
+      "name": "mymdrecord",
+      "os": "win",
+      "root": "D:\\notes\\mymdrecord",
+      "desc": "回归测试用"
+    }
+  ],
+  "activeWs": "mymajor",
+  "activePath": null
+}

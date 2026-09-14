@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <title>open markdown blog</title>
+  <script>
+    // 首屏前先定主题（按北京时间；6:00–18:00 白天，其余深色），避免闪烁
+    (function () {
+      try {
+        var h = Number(new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false
+        }).format(new Date())) % 24
+        var t = (h >= 6 && h < 18) ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', t)
+        document.documentElement.style.colorScheme = t
+      } catch (e) { /* 忽略 */ }
+    })()
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    // 双击打开 dist/index.html（file:// 协议）时，构建产物里的 /assets/、/api/ 都是绝对路径，
+    // 会解析到磁盘根目录而 404，页面一片空白。给一句明确提示，别让人对着白屏猜。
+    if (location.protocol === 'file:') {
+      document.getElementById('app').innerHTML =
+        '<div style="font:16px/1.8 system-ui,-apple-system,sans-serif;max-width:38em;margin:14vh auto;padding:0 24px;color:#333">' +
+        '<h1 style="font-size:20px;margin:0 0 12px">请通过服务打开</h1>' +
+        '<p style="margin:0 0 8px">这不是静态站点：目录树、正文、图片都由后端实时读取，' +
+        '直接双击 dist/index.html 无法运行。</p>' +
+        '<pre style="background:#f4f4f4;padding:12px 14px;border-radius:6px;margin:12px 0">本地开发：后端 ./gradlew bootRun   +   前端 npm run dev</pre>' +
+        '<p style="margin:0">然后访问后端或前端开发服务器的地址（默认 <a href="http://localhost:8090/">:8090</a> 或 <a href="http://localhost:5173/">:5173</a>）</p>' +
+        '</div>'
+    }
+  </script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

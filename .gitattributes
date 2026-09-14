@@ -1,0 +1,17 @@
+# 这些文件最终要在 Linux 上直接执行/解析，强制 LF。
+# 本机 core.autocrlf=true，不写这些的话 Windows 上检出会变成 CRLF，
+# 服务器上 bash 会报 $'\r': command not found，nginx/systemd 也会解析失败。
+**/*.sh              text eol=lf
+
+# Gradle wrapper 的 shell 脚本没有扩展名，上面那条 **/*.sh 覆盖不到它。
+# 它要在服务器上直接执行（./gradlew bootJar），CRLF 会让 sh 报
+# bad interpreter: /bin/sh^M 而失败 —— 必须显式钉成 LF。
+**/gradlew           text eol=lf
+
+# 服务器上那些配置文件。虽然 Caddy/nginx 一般能容忍 CRLF，但没必要赌。
+**/*.conf            text eol=lf
+Caddyfile            text eol=lf
+
+# Windows 批处理必须 CRLF：LF-only 时 cmd 能跑大部分语句，
+# 但 `call :label` 会报「找不到批标签」。
+*.bat                text eol=crlf

@@ -1,7 +1,36 @@
+# 依赖与构建产物（不含斜杠 → 在任意层级都匹配）
 node_modules
 dist
-data
+
+# Gradle：项目级构建目录
+api/.gradle
+api/build
+
+# 环境与日志
 .env
 .env.local
 .env.*.local
 *.log
+
+# H2 数据库文件（数据目录被配到仓库内时兜底）
+*.mv.db
+*.trace.db
+
+# 验收脚本的运行产物（临时数据库与日志）
+tools/verify/.run
+# 契约回放用的种子配置：里面是本机的笔记目录，各人机器上不一样，不进仓库。
+# 第一次跑之前从 seed-config.example.json 复制一份出来并改路径（见 tools/verify/README.md）。
+tools/verify/seed-config.json
+
+# 打包产物（部署包，不进仓库）
+# 必须写 /pkg（只匹配仓库根）—— 写成裸 pkg 会连 tools/pkg/ 一起吞掉，
+# 而那里放的是 make-package.bat 要拷进包里的 run.sh 与 README.txt，属于源文件。
+/pkg
+
+# 运行时数据：H2 库 + 启动器日志（file/db/h2）、上传的图片（file/img）
+file
+
+# 日志目录（只在仓库根匹配）。*.log 管不到滚动出来的 .log.gz 归档，
+# 而 gradlew bootRun 之类「没找到 jar」的启动方式会把 logs/ 落在当前目录。
+# 开发态的正常落点是 api/build/libs/logs/，已经被上面的 api/build 覆盖。
+/logs

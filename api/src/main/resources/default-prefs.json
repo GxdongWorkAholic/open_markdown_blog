@@ -1,0 +1,13 @@
+{
+  "bg": "default",
+  "bgUrl": "",
+  "veil": 0.5,
+  "poem": ["问渠那得清如许", "为有源头活水来", "千淘万漉虽辛苦", "吹尽狂沙始到金", "不积跬步，无以至千里", "不积小流，无以成江海"],
+  "speed": "mid",
+  "poemSize": 46,
+  "tocDefaultHidden": false,
+  "readerSize": 17,
+  "icpOn": false,
+  "icpText": "",
+  "icpUrl": "https://beian.miit.gov.cn"
+}

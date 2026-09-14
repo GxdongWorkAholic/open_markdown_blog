@@ -55,7 +55,7 @@ ui_protype/
 
 - `mymajor`：Java 学习库（`java-doc`，16 个主题章节，104 篇 md，目录树另含 16 个 pdf/doc 等）。
 - `mymdrecord`：分类记录笔记库，19 篇 md，含截图资源。
-- 共 123 篇 md 正文快照内嵌，37 张 md 相对引用图本地化到 `img/`（原始来源：`E:\mymicrosoft\download\temp`）。
+- 共 123 篇 md 正文快照内嵌，37 张 md 相对引用图本地化到 `img/`（原始来源：`D:\notes`）。
 
 ## 本地运行
 

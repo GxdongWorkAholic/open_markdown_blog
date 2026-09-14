@@ -1,0 +1,51 @@
+# open markdown blog —— Caddy 反向代理（HTTPS 自动签发与续期）
+#
+# 落点：/etc/caddy/Caddyfile
+# 生效：sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# 看日志：journalctl -u caddy -f
+#
+# 前提（缺一条都会卡住）：
+#   1) blog.example.com 的 A 记录已指向这台服务器（泛解析 *.example.com 也行）
+#   2) 80 / 443 已放行，且没被别的 web 服务占着 —— 1Panel 的 OpenResty 默认就占着这两个端口，
+#      要先把那个应用停掉，否则 Caddy 起不来（自动签证书也要用 80）
+#   3) 后端在 127.0.0.1:8090 上跑着：cd api/lastest && sh run.sh
+#   4) 前端产物在下面 root 指的目录里：make-package.bat 打出 pkg\www\lastest，
+#      rsync 到服务器上的对应位置即是
+#
+# 为什么是 Caddy 而不是 nginx：
+# Caddy 是宿主上的单个进程，直接就能连 127.0.0.1:8090，所以后端可以继续**只听回环**。
+# 换成容器版的 OpenResty 就不一样了 —— 容器里的 127.0.0.1 是容器自己，够不着宿主上的后端，
+# 于是后端得绑到 docker 网关上，还得处理挂载、网段、IP 漂移一堆事。
+# 另外 Caddy 自动申领并续期 Let's Encrypt 证书，不用自己跑 certbot。
+
+blog.example.com {
+	encode gzip
+
+	# /api 原样转给后端。
+	# 这里没有 nginx 那个「proxy_pass 末尾不能加斜杠、否则 /api/ws 会被改写成 /ws」的坑：
+	# Caddy 不改写路径，X-Forwarded-For / X-Real-IP / X-Forwarded-Proto 也默认就带上了。
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8090
+	}
+
+	# 其余都是前端静态文件；找不到就回落 index.html（Vue Router 是 history 模式）
+	handle {
+		root * /srv/open-markdown-blog/www/lastest
+
+		# 带内容哈希的产物可以长缓存。index.html 不设 —— 否则发了新版本用户还是看旧的。
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=604800"
+
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# 如果嫌上面分两段麻烦，也可以只留最简形式 —— 让这个 jar 自己托管前端
+# （run.sh 已经把 app.static-dir 指到 www/lastest 了，静态文件与 SPA fallback 它都有）。
+# 代价是每个静态文件都要过一遍 JVM，且 /assets/ 拿不到长缓存头：
+#
+# blog.example.com {
+#     encode gzip
+#     reverse_proxy 127.0.0.1:8090
+# }

@@ -1,0 +1,25 @@
+# 服务器部署环境。启用方式：SPRING_PROFILES_ACTIVE=prod（tools/pkg/run.sh 里设）。
+#
+# 路径**不写死**：run.sh 按「包放在哪」算出部署根，再导出这两个环境变量：
+#   <部署根>/file/db/h2   H2 的库文件（blog.mv.db）与它自己的 trace 日志
+#   <部署根>/file/img     上传的图片
+# 环境变量的优先级高于 profile 文件，所以把包挪到别处、或者换个目录名，都不用改配置。
+#
+# 下面的默认值只是「不经过 run.sh、直接 java -jar」时的兜底；
+# /srv/open-markdown-blog 是个占位路径，换成你自己的部署根。
+#
+# 第一次部署前要把这两个目录建好并授权（run.sh 的注释、包内 README.txt 里都写了）：
+#   sudo mkdir -p <部署根>/file/db/h2 <部署根>/file/img
+#   sudo chown -R $(id -un):$(id -gn) <部署根>/file
+app:
+  data-dir: ${APP_DATA_DIR:/srv/open-markdown-blog/file/db/h2}
+  img-dir: ${APP_IMG_DIR:/srv/open-markdown-blog/file/img}
+
+# 日志：由 api/src/main/resources/logback-spring.xml 写一份到
+# <jar目录>/logs/<日期>/api.log（10MB 或跨天滚动，旧的自动 gzip 压缩，留 30 天）。
+#
+# 这里**刻意不配 logging.file.name**：classpath 上一旦有 logback-spring.xml，
+# Spring Boot 就整个不再应用 logging.file.name —— 留着它只会让人以为配置生效了。
+#
+# 目录由 com.gxdong.blog.config.LogDir 按「jar 所在目录」推出，与怎么启动无关
+# （sh run.sh / systemd 都一样）。要挪地方用 APP_LOG_DIR 或 -Dapp.log.dir。

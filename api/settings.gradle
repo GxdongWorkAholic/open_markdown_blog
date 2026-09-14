@@ -1,0 +1,20 @@
+// Gradle 侧的仓库配置。注意 Gradle 不读 ~/.m2/settings.xml，
+// 所以 Maven 里配的阿里云镜像在这里完全不生效，必须在这里再写一遍。
+pluginManagement {
+  repositories {
+    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }  // Spring Boot 插件走这里
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositories {
+    // mavenLocal() 解析到 D:/myapp_dev/kit/oracle/local_repo/jar
+    // （由 ~/.gradle/gradle.properties 的 systemProp.maven.repo.local 指定）
+    // 所以 Maven 已经下好的 spring-boot-*:3.5.3 与 h2:2.3.232 可以直接复用，不用重下。
+    mavenLocal()
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    mavenCentral()
+  }
+}
+rootProject.name = 'blog-api'

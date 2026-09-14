@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  open markdown blog —— 日志配置
+
+  为什么不用 Spring Boot 的 logging.file.name 而是自己写一份：
+  内置那套只能滚到「一个固定文件名 + 日期/序号后缀」，做不出「按日期分目录」。
+  这里要做到 <jar目录>/logs/yyyy-MM-dd/api.log，只能自己配 appender。
+
+  目录来源：系统属性 app.log.dir，由 com.gxdong.blog.config.LogDir 在
+  SpringApplication.run() **之前**算好（jar 所在目录下的 logs/）。
+  覆盖方式：-Dapp.log.dir=… 或环境变量 APP_LOG_DIR。
+  defaultValue 只是兜底，正常情况下不会用到。
+-->
+<configuration>
+
+    <!-- Boot 自带：提供 ${CONSOLE_LOG_PATTERN} / ${FILE_LOG_PATTERN} / ${CONSOLE_LOG_CHARSET} 等 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty name="LOG_DIR" source="app.log.dir" defaultValue="logs"/>
+    <!-- 进程启动那一刻的日期。下面 <file> 与 fileNamePattern 都用它，于是
+         「当前日志」与「当天滚出来的归档」落在同一个日期目录里，不是两处。 -->
+    <timestamp key="TODAY" datePattern="yyyy-MM-dd"/>
+    <property name="LOG_SUBDIR" value="${LOG_DIR}/${TODAY}"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <!-- 控制台沿用 Boot 的默认字符集逻辑（跟着本机终端走）。
+                 文件那份必须写死 UTF-8，见下。 -->
+            <charset>${CONSOLE_LOG_CHARSET}</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_SUBDIR}/api.log</file>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <!-- 这一行不能省。logback 默认用平台字符集，而服务器上 LANG 常常是 POSIX
+                 → 编码变成 ANSI_X3.4-1968，中文横幅与中文报错全部变成一串 ?。
+                 写死 UTF-8 之后，日志在任何编辑器里都能正常看。 -->
+            <charset>UTF-8</charset>
+        </encoder>
+
+        <!-- 既按天滚、也按大小滚。纯 TimeBasedRollingPolicy 到不了 10MB 就切，
+             纯 SizeBasedTriggeringPolicy 又不会跨天。 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 用 ${LOG_SUBDIR} 而不是再算一次日期：保证归档就落在当前日志旁边。
+                 %d 与 %i 都是这个策略**必须**有的占位符；.gz 后缀让 logback 自动压缩。
+
+                 已知取舍：进程跨过午夜时，「当前日志」仍是启动那天的那个文件
+                 （logback 的活动文件名在启动时就定下了，没法每天跟着变），
+                 只有之后滚出来的归档会进「当天」的目录。常驻服务上可接受。 -->
+            <fileNamePattern>${LOG_SUBDIR}/api.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <!-- 留 30 天、总量压到 1GB 以内，超出的老归档自动删掉 -->
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <!-- 各包日志级别仍然由 application.yml 的 logging.level.* 决定，不用写在这里 -->
+</configuration>

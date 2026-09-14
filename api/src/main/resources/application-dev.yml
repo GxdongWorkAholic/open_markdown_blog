@@ -1,0 +1,9 @@
+# 本地开发环境。启用方式：SPRING_PROFILES_ACTIVE=dev（start-dev.bat 会自动设）。
+#
+# 两个目录都写成**相对路径**，相对于「启动 java 时的当前目录」。
+# 所以启动器必须从**仓库根**启动 java —— 它现在就是这么做的（不再 pushd api），
+# 于是 ./. 指向仓库根，两个目录分别落在 <仓库>/file/db/h2 与 <仓库>/file/img。
+# 如果哪天有人改成从 api/ 目录启动，它们会跑到 api/file/... 去，那就对不上了。
+app:
+  data-dir: ./file/db/h2
+  img-dir: ./file/img

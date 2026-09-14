@@ -1,0 +1,61 @@
+server:
+  # 默认 8090：8080 是最容易被别的服务（尤其是各种 Tomcat）先占掉的端口。
+  # 换端口用 SERVER_PORT=xxxx，前端那边同步改 API_TARGET 与反代配置即可。
+  port: ${SERVER_PORT:8090}
+  # 默认只监听回环：对外一律经同机的反向代理进来（仓库根的 Caddyfile 就是现成的）。
+  # 要让端口自己直接对外，设 SERVER_ADDRESS=0.0.0.0 —— 但那时前面务必有 TLS。
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  tomcat:
+    max-keep-alive-requests: -1          # 旧的 Node 服务没有这个上限，对齐
+    # Tomcat 默认 keep-alive 超时是 20s（跟随 connectionTimeout）。
+    # 前端 Vite 的代理池会长时间持有空闲连接，一旦超过 20s 就被 Tomcat 关掉，
+    # 之后再复用就变成 read ECONNRESET，代理回 HTTP 500 + 空 body ——
+    # 表现是「隔一阵子第一次打开偶发报错，刷新就好」。
+    # 拉到 60s，由客户端在 30s 时主动丢弃空闲连接（见 vue3/vite.config.js），两边错开。
+    keep-alive-timeout: 60s
+  error:
+    whitelabel:
+      enabled: false
+
+spring:
+  application:
+    name: blog-api
+  sql:
+    init:
+      mode: always                       # schema.sql 全是 IF NOT EXISTS，每次启动幂等执行
+  mvc:
+    problemdetails:
+      enabled: false                     # 错误体由 GlobalExceptionHandler 自己给中文 JSON
+  # 注意：这里刻意不配 spring.datasource.* ——
+  # URL 由 DataSourceConfig 手写（要先把数据目录建好并验可写、并把 Windows 反斜杠转正斜杠）
+
+app:
+  # 两个需要可写的目录。这里只是「不做任何配置时的兜底」，实际由各环境的 profile 指定：
+  #
+  #             data-dir（H2 库与它自己的 trace 日志）      img-dir（上传的图片）
+  #   本地开发   <仓库>/file/db/h2                          <仓库>/file/img
+  #   服务器     <部署根>/file/db/h2                        <部署根>/file/img
+  #
+  # 两者**平级**，不是一个套一个。库文件直接放在 data-dir 下：blog.mv.db
+  # 优先级：命令行 --app.xxx-dir > 环境变量 > profile 文件 > 这里的兜底。
+  data-dir: ${APP_DATA_DIR:${user.home}/.open-markdown-blog}
+  data-check: ${APP_DATA_CHECK:true}     # 启动时真写一个探针文件验可写；false 仅用于只读排障
+  img-dir: ${APP_IMG_DIR:${user.home}/.open-markdown-blog/img}
+  upload-max-bytes: ${APP_UPLOAD_MAX_BYTES:20971520}   # 20MB，与前端 nginx 的 client_max_body_size 对齐
+  # 前端构建产物（dist/）目录。**留空 = 不托管静态文件**（默认）。
+  # 指到 dist 之后，这个 jar 自带静态托管 + SPA history fallback —— 一个进程一个端口就是全站，
+  # 服务器上只要一个 JRE。tools/pkg/run.sh 就是这么用的（指到 ../../www/lastest）。
+  static-dir: ${APP_STATIC_DIR:}
+  # 让 H2 开 AUTO_SERVER（DBeaver 能在应用运行时同时打开库文件）。
+  # 默认 false：那会让 H2 额外起一个 TCP 监听，实测默认绑 0.0.0.0，
+  # 加上库用户是 sa/空口令，等于把配置与门禁校验值暴露给同网段。
+  # 打开时会强制监听地址为 127.0.0.1。不用它也能看库：先停掉应用，再以文件模式打开。
+  db-auto-server: ${APP_DB_AUTO_SERVER:false}
+  auth-protect-reads: ${APP_AUTH_PROTECT_READS:false}  # true = 连读接口也要密钥（博客变私有）
+  auth-reset-to-default: ${APP_AUTH_RESET:false}       # 忘记密钥时的恢复开关，只认启动参数/环境变量
+  cors-allowed-origins: ${APP_CORS_ORIGINS:}           # 空 = 不启用 CORS（同源部署）
+
+logging:
+  level:
+    root: INFO
+    com.gxdong.blog: INFO
